@@ -61,7 +61,8 @@ Tracked here instead of built. Move an item into v1 only with a reason.
 
 Sign-in and network:
 
-- SSO: GitLab, Google, Office 365, SAML, OpenID. Needs a browser login
+- SSO: GitLab, Google, Office 365, SAML, OpenID. Out of v1 by decision
+  (2026-11-12). Needs a browser login
   flow that ends in a deep link (see docs/analysis.md).
 - Untrusted server certificates (self-signed or private CA): asking the
   user to trust one and remembering it.
