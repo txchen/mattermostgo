@@ -26,7 +26,7 @@ the login keychain, and the notary credentials stored there as
    xcrun stapler validate mattermost-go-VERSION.dmg
    lipo -archs "Mattermost Go.app/Contents/MacOS/Mattermost Go"   # arm64 x86_64
    shasum -a 256 mattermost-go-VERSION.dmg > mattermost-go-VERSION.dmg.sha256
-   cd .. && shasum -a 256 */*.deb */*.rpm */*.tar.gz */*setup*.exe darwin-universal/*.dmg > SHA256SUMS
+   cd .. && shasum -a 256 */*.deb */*.rpm */*.tar.gz */*setup*.exe darwin-universal/*.dmg | sed 's|  [a-z0-9-]*/|  |' > SHA256SUMS
    ```
 
 4. Tag, push and publish:
