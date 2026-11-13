@@ -48,8 +48,11 @@ type View struct {
 	md                  map[config.ServerID]*mdview.Options
 	rhsSize             float32
 	dialog              dialog
-	// serverMenu and meMenu are the top bar's popovers.
-	serverMenu, meMenu, plusMenu bool
+	press               textPress
+	textClick           textClick
+	// serverMenu and plusMenu are the popovers of the server button and
+	// the sidebar's + button.
+	serverMenu, plusMenu bool
 }
 
 type listKey struct {
@@ -149,6 +152,11 @@ func (v *View) Build(c *ui.Context) {
 	v.editServerDialog(c)
 	v.switcherDialog(c)
 	v.dialogs(c)
+	if tc := v.textClick; tc.post != "" {
+		v.textClick = textClick{}
+		v.App.OpenThread(tc.server, tc.post)
+		c.Invalidate()
+	}
 }
 
 func (v *View) welcome(c *ui.Context) {

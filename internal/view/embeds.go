@@ -38,7 +38,7 @@ func (v *View) webImage(c *ui.Context, s *app.Server, img store.Image, w, h floa
 
 // embed shows the preview of a post's link, as the webapp's OpenGraph
 // card, or the image itself for a link to one.
-func (v *View) embed(c *ui.Context, s *app.Server, e *store.Embed) {
+func (v *View) embed(c *ui.Context, s *app.Server, e *store.Embed, opens store.PostID) {
 	t := c.Theme()
 	p := colors(c)
 	if e.ImageOnly {
@@ -65,7 +65,7 @@ func (v *View) embed(c *ui.Context, s *app.Server, e *store.Embed) {
 						}
 					}
 					if e.Description != "" {
-						ui.Text(c, e.Description).FontSize(13).LineHeight(1.4).MaxLines(3).Selectable()
+						v.opensThread(ui.Text(c, e.Description).FontSize(13).LineHeight(1.4).MaxLines(3).Selectable(), s, opens)
 					}
 				})
 				if e.Image != nil && !large {
@@ -102,12 +102,12 @@ func attachmentColor(c *ui.Context, name string) ui.Color {
 
 // attachment shows a message attachment as the webapp does: a colored
 // bar, the author, title, text, fields, image and footer.
-func (v *View) attachment(c *ui.Context, s *app.Server, a store.Attachment) {
+func (v *View) attachment(c *ui.Context, s *app.Server, a store.Attachment, opens store.PostID) {
 	t := c.Theme()
 	p := colors(c)
 	md := v.markdownOptions(s)
 	if a.Pretext != "" {
-		mdview.View(c, markdown.Prepare(a.Pretext), md).AlignSelf(ui.Start)
+		v.opensThread(mdview.View(c, markdown.Prepare(a.Pretext), md), s, opens)
 	}
 	ui.Row(c).FillWidth().MaxWidth(640).Margin(4, 0, 0, 0).Radius(4).BorderWidth(1).BorderColor(t.Border).Clip().Children(func() {
 		ui.Box(c).Width(4).FillHeight().Background(attachmentColor(c, a.Color))
@@ -138,9 +138,9 @@ func (v *View) attachment(c *ui.Context, s *app.Server, a store.Attachment) {
 						}
 					}
 					if a.Text != "" {
-						mdview.View(c, markdown.Prepare(a.Text), md).AlignSelf(ui.Start)
+						v.opensThread(mdview.View(c, markdown.Prepare(a.Text), md), s, opens)
 					} else if a.Title == "" && a.Fallback != "" && len(a.Fields) == 0 {
-						ui.Text(c, a.Fallback).FontSize(14).Selectable()
+						v.opensThread(ui.Text(c, a.Fallback).FontSize(14).Selectable(), s, opens)
 					}
 				})
 				if a.ThumbURL != "" {
@@ -148,7 +148,7 @@ func (v *View) attachment(c *ui.Context, s *app.Server, a store.Attachment) {
 				}
 			})
 			if len(a.Fields) > 0 {
-				v.attachmentFields(c, s, a.Fields)
+				v.attachmentFields(c, s, a.Fields, opens)
 			}
 			if a.ImageURL != "" {
 				img := ui.ButtonBase(c).AlignSelf(ui.Start).Label("Open image").Tooltip(a.ImageURL)
@@ -171,7 +171,7 @@ func (v *View) attachment(c *ui.Context, s *app.Server, a store.Attachment) {
 
 // attachmentFields lays fields out as the webapp: a short field shares
 // its line with the next short one, a long field takes the whole line.
-func (v *View) attachmentFields(c *ui.Context, s *app.Server, fields []store.AttachmentField) {
+func (v *View) attachmentFields(c *ui.Context, s *app.Server, fields []store.AttachmentField, opens store.PostID) {
 	md := v.markdownOptions(s)
 	field := func(f store.AttachmentField) {
 		ui.Column(c).Grow(1).Shrink(1).Basis(0).Gap(2).Children(func() {
@@ -179,7 +179,7 @@ func (v *View) attachmentFields(c *ui.Context, s *app.Server, fields []store.Att
 				ui.Text(c, f.Title).FontSize(13).FontWeight(700)
 			}
 			if f.Value != "" {
-				mdview.View(c, markdown.Prepare(f.Value), md).AlignSelf(ui.Start)
+				v.opensThread(mdview.View(c, markdown.Prepare(f.Value), md), s, opens)
 			}
 		})
 	}

@@ -5,6 +5,7 @@ import (
 	"net/url"
 	"slices"
 	"strings"
+	"time"
 
 	"github.com/txchen/mattermostgo/internal/store"
 )
@@ -180,4 +181,41 @@ func (c *Client) RenameCategory(ctx context.Context, team store.TeamID, category
 // their default categories.
 func (c *Client) DeleteCategory(ctx context.Context, team store.TeamID, category string) error {
 	return c.do(ctx, "DELETE", c.categoriesPath(team)+"/"+category, nil, nil, nil)
+}
+
+// SetStatus sets the status of the user; DND with dndEnd set ends then.
+func (c *Client) SetStatus(ctx context.Context, me store.UserID, status store.Status, dndEnd time.Time) error {
+	body := map[string]any{"user_id": me, "status": status}
+	if status == store.DND && !dndEnd.IsZero() {
+		body["dnd_end_time"] = dndEnd.Unix()
+	}
+	return c.do(ctx, "PUT", "/users/"+string(me)+"/status", nil, body, nil)
+}
+
+// SetCustomStatus sets the emoji and text by the name of the user.
+// duration names when it clears, as the webapp does, empty for never.
+func (c *Client) SetCustomStatus(ctx context.Context, cs store.CustomStatus, duration string) error {
+	body := map[string]any{"emoji": cs.Emoji, "text": cs.Text, "duration": duration}
+	if !cs.ExpiresAt.IsZero() {
+		body["expires_at"] = cs.ExpiresAt.UTC().Format(time.RFC3339)
+	}
+	return c.do(ctx, "PUT", "/users/me/status/custom", nil, body, nil)
+}
+
+func (c *Client) ClearCustomStatus(ctx context.Context) error {
+	return c.do(ctx, "DELETE", "/users/me/status/custom", nil, nil, nil)
+}
+
+// UserPatch holds the profile fields to change.
+type UserPatch struct {
+	FirstName string `json:"first_name"`
+	LastName  string `json:"last_name"`
+	Nickname  string `json:"nickname"`
+	Position  string `json:"position"`
+}
+
+func (c *Client) PatchMe(ctx context.Context, p UserPatch) (store.User, error) {
+	var w wireUser
+	err := c.do(ctx, "PUT", "/users/me/patch", nil, p, &w)
+	return w.user(), err
 }

@@ -270,6 +270,10 @@ func (v *View) dialogs(c *ui.Context) {
 			v.membersDialog(c, s, d)
 		case *integrations:
 			v.integrationsDialog(c, s, d)
+		case *customStatusDialog:
+			v.customStatusDialog(c, s, d)
+		case *profileDialog:
+			v.profileDialog(c, s, d)
 		}
 	})
 	if !open {

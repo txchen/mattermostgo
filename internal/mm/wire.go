@@ -7,6 +7,7 @@ import (
 	"cmp"
 	"encoding/json"
 	"fmt"
+	"time"
 
 	"github.com/txchen/mattermostgo/internal/store"
 )
@@ -24,13 +25,29 @@ type wireUser struct {
 	DeleteAt          int64             `json:"delete_at"`
 	LastPictureUpdate int64             `json:"last_picture_update"`
 	NotifyProps       map[string]string `json:"notify_props"`
+	Position          string            `json:"position"`
+	Email             string            `json:"email"`
+	Props             map[string]string `json:"props"`
+}
+
+// customStatus reads the custom status a user keeps, as JSON, in a prop.
+func (u wireUser) customStatus() *store.CustomStatus {
+	var w struct {
+		Emoji     string    `json:"emoji"`
+		Text      string    `json:"text"`
+		ExpiresAt time.Time `json:"expires_at"`
+	}
+	if json.Unmarshal([]byte(u.Props["customStatus"]), &w) != nil || w.Emoji == "" && w.Text == "" {
+		return nil
+	}
+	return &store.CustomStatus{Emoji: w.Emoji, Text: w.Text, ExpiresAt: w.ExpiresAt}
 }
 
 func (u wireUser) user() store.User {
 	return store.User{
 		ID: store.UserID(u.ID), Username: u.Username, FirstName: u.FirstName, LastName: u.LastName,
 		Nickname: u.Nickname, IsBot: u.IsBot, Deleted: u.DeleteAt != 0, PictureAt: u.LastPictureUpdate,
-		DesktopNotify: u.NotifyProps["desktop"],
+		DesktopNotify: u.NotifyProps["desktop"], Position: u.Position, Email: u.Email, CustomStatus: u.customStatus(),
 	}
 }
 

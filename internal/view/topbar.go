@@ -188,7 +188,7 @@ func (v *View) meButton(c *ui.Context, s *app.Server) {
 	if me == nil {
 		return
 	}
-	btn := ui.ButtonBase(c).Size(32, 32).Radius(16).Center().Label("Account").Tooltip(me.Username)
+	btn := ui.ButtonBase(c).Size(32, 32).Radius(16).Center().Label("Account menu").Tooltip(me.Username)
 	btn.Children(func() {
 		ui.Box(c).Size(28, 28).Children(func() {
 			v.avatar(c, s, me.ID, 28)
@@ -197,22 +197,7 @@ func (v *View) meButton(c *ui.Context, s *app.Server) {
 			})
 		})
 	})
-	if btn.Clicked() {
-		v.meMenu = !v.meMenu
-	}
-	ui.Popover(c, btn, &v.meMenu, func() {
-		menuPanel(c, 240, func() {
-			ui.Column(c).Padding(4, 16, 8, 16).Children(func() {
-				ui.Text(c, me.FullName()).Bold().FontSize(14)
-				ui.Text(c, "@"+me.Username).FontSize(12).TextColor(c.Theme().TextMuted)
-			})
-			menuDivider(c)
-			if menuRow(c, "logout", "Log Out", "", true) {
-				v.meMenu = false
-				v.App.Logout(s)
-			}
-		})
-	})
+	btn.PopoverMenuButton(func(m *ui.Menu) { v.accountMenu(m, c, s) }, ui.PopoverMenuButtonOptions{At: ui.AnchorBottomEnd, Self: ui.AnchorTopEnd})
 }
 
 func statusColor(st store.Status, p palette) ui.Color {

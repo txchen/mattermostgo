@@ -37,6 +37,22 @@ type User struct {
 	// DesktopNotify is the user's own notification setting ("all",
 	// "mention", "none"); the server sends it for the current user only.
 	DesktopNotify string
+	Position      string
+	// Email is empty when the server hides it.
+	Email        string
+	CustomStatus *CustomStatus
+}
+
+// CustomStatus is the emoji and text a user shows by their name.
+type CustomStatus struct {
+	Emoji, Text string
+	// ExpiresAt is zero for a status that does not clear on its own.
+	ExpiresAt time.Time
+}
+
+// Shows reports whether the status has not expired at now.
+func (cs *CustomStatus) Shows(now time.Time) bool {
+	return cs != nil && (cs.ExpiresAt.IsZero() || now.Before(cs.ExpiresAt))
 }
 
 func (u *User) FullName() string {

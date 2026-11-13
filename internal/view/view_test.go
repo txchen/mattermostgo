@@ -379,7 +379,7 @@ func TestClickPostOpensThread(t *testing.T) {
 		t.Fatalf("a link's click opened thread %q", h.srv.Thread)
 	}
 	r, _ = h.tt.Find("hello team")
-	h.tt.ClickAt(r.X+r.W+100, r.Y+r.H/2)
+	h.tt.ClickAt(r.X+r.W-50, r.Y+r.H/2)
 	h.settle(func() bool { return h.tt.HasText("an earlier reply") })
 	if h.srv.Thread != "p1" {
 		t.Fatalf("thread %q", h.srv.Thread)
@@ -390,6 +390,34 @@ func TestClickPostOpensThread(t *testing.T) {
 		t.Fatal(err)
 	}
 	h.settle(func() bool { return h.srv.Thread == "p1" })
+
+	// A click on the text itself opens the thread too, Markdown or plain.
+	for _, c := range []struct {
+		text string
+		post store.PostID
+	}{{"hello team", "p1"}, {"second", "p2"}} {
+		h.srv.Thread = ""
+		h.tt.Frame()
+		r, _ = h.tt.Find(c.text)
+		h.tt.ClickAt(r.X+5, r.Y+r.H/2)
+		h.settle(func() bool { return h.srv.Thread == c.post })
+	}
+
+	// A drag over the text selects it and opens nothing.
+	h.srv.Thread = ""
+	h.tt.Frame()
+	r, _ = h.tt.Find("second")
+	h.tt.Press(r.X+2, r.Y+r.H/2)
+	h.tt.Frame()
+	h.tt.Move(r.X+20, r.Y+r.H/2)
+	h.tt.Frame()
+	h.tt.Move(r.X+r.W-2, r.Y+r.H/2)
+	h.tt.Frame()
+	h.tt.Release(r.X+r.W-2, r.Y+r.H/2)
+	h.settle(func() bool { return true })
+	if h.srv.Thread != "" {
+		t.Errorf("a drag opened thread %q", h.srv.Thread)
+	}
 }
 
 // A system post is headed by the system avatar and name, as the webapp's.

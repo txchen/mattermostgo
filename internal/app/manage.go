@@ -342,3 +342,39 @@ func (a *App) ChannelLink(s *Server, id store.ChannelID) string {
 	}
 	return s.URL.String() + "/" + team.Name + path
 }
+
+// SetStatus sets the status of the user, as online, away, DND until
+// dndEnd (zero for until changed) or offline.
+func (a *App) SetStatus(s *Server, status store.Status, dndEnd time.Time) {
+	me := s.Store.Me
+	a.apply(s, store.StatusesChanged{Statuses: map[store.UserID]store.Status{me: status}})
+	a.do(s, func(ctx context.Context, c *mm.Client) error { return c.SetStatus(ctx, me, status, dndEnd) }, nil)
+}
+
+// SetCustomStatus sets the custom status of the user, or clears it when
+// cs is nil.
+func (a *App) SetCustomStatus(s *Server, cs *store.CustomStatus, duration string) {
+	me := s.Me()
+	if me == nil {
+		return
+	}
+	u := *me
+	u.CustomStatus = cs
+	a.apply(s, store.UsersLoaded{Users: []store.User{u}})
+	a.do(s, func(ctx context.Context, c *mm.Client) error {
+		if cs == nil {
+			return c.ClearCustomStatus(ctx)
+		}
+		return c.SetCustomStatus(ctx, *cs, duration)
+	}, nil)
+}
+
+// PatchMe saves the profile of the user.
+func (a *App) PatchMe(s *Server, p mm.UserPatch, done func()) {
+	Call(a, s, func(ctx context.Context, c *mm.Client) (store.User, error) { return c.PatchMe(ctx, p) }, func(u store.User) {
+		a.apply(s, store.UsersLoaded{Users: []store.User{u}})
+		if done != nil {
+			done()
+		}
+	})
+}

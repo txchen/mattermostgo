@@ -5,8 +5,11 @@ import (
 	"slices"
 	"strings"
 	"testing"
+	"time"
 
 	"github.com/egoist/mygo/ui"
+
+	"github.com/txchen/mattermostgo/internal/store"
 )
 
 // choose chooses from the menu of an element: its context menu, or with
@@ -162,6 +165,57 @@ func TestIncomingWebhook(t *testing.T) {
 	}
 	h.settle(func() bool { return h.tt.HasText(h.srv.URL.String() + "/hooks/hook1") })
 	h.snapshot("integrations")
+}
+
+// The avatar in the top bar opens the account menu: status, custom
+// status, profile and log out.
+func TestAccountMenu(t *testing.T) {
+	h := newHarness(t)
+	if err := h.tt.Click("Account menu"); err != nil {
+		t.Fatal(err)
+	}
+	h.tt.Frame()
+	items := h.tt.Menu()
+	for _, want := range []string{"@me", "Set custom status", "Online", "Away", "Do not disturb", "Offline", "Profile", "Log out"} {
+		if !slices.Contains(items, want) {
+			t.Errorf("no %q in %q", want, items)
+		}
+	}
+	h.snapshot("account-menu")
+	h.tt.CloseMenu()
+
+	h.replies["PUT /api/v4/users/me/status"] = `{}`
+	h.choose("Account menu", "Away")
+	if b := h.called("PUT /api/v4/users/me/status"); b["status"] != "away" || b["user_id"] != "me" {
+		t.Errorf("sent %v", b)
+	}
+	if h.srv.Store.Statuses["me"] != store.Away {
+		t.Error("status not shown at once")
+	}
+	h.mu.Lock()
+	h.calls = nil
+	h.mu.Unlock()
+	h.choose("Account menu", "Do not disturb", "1 hour")
+	b := h.called("PUT /api/v4/users/me/status")
+	if end, _ := b["dnd_end_time"].(float64); b["status"] != "dnd" || end < float64(time.Now().Add(59*time.Minute).Unix()) {
+		t.Errorf("sent %v", b)
+	}
+
+	h.replies["PUT /api/v4/users/me/status/custom"] = `{}`
+	h.choose("Account menu", "Set custom status")
+	if err := h.tt.Click("In a meeting"); err != nil {
+		t.Fatalf("%v in %q", err, h.tt.Texts())
+	}
+	h.tt.Frame()
+	if err := h.tt.Click("Set Status"); err != nil {
+		t.Fatal(err)
+	}
+	if b := h.called("PUT /api/v4/users/me/status/custom"); b["emoji"] != "calendar" || b["text"] != "In a meeting" {
+		t.Errorf("sent %v", b)
+	}
+	if cs := h.srv.Me().CustomStatus; !cs.Shows(time.Now()) || cs.Text != "In a meeting" {
+		t.Errorf("custom status %+v", cs)
+	}
 }
 
 // A DM keeps its menu to what applies to one.

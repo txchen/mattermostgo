@@ -10,6 +10,8 @@ import (
 	"testing"
 	"time"
 
+	"github.com/egoist/mygo/ui"
+
 	"github.com/txchen/mattermostgo/internal/app"
 	"github.com/txchen/mattermostgo/internal/mm"
 	"github.com/txchen/mattermostgo/internal/store"
@@ -264,6 +266,48 @@ func TestParityUIChannels(t *testing.T) {
 	c.until("archived", func() bool { return s.Store.Channels[id] == nil })
 	if got := must(apiAlice.Channel(ctx, id)); !got.Deleted {
 		t.Error("not archived on the server")
+	}
+}
+
+// The account menu sets the status, the custom status and the profile
+// on the server.
+func TestParityUIAccount(t *testing.T) {
+	base := serverURL(t)
+	ctx := context.Background()
+	apiCarol, carol := login(t, base, "carol")
+	c := newClient(t)
+	s := c.loginAs(base, "carol")
+	status := func() store.Status { return must(apiCarol.Statuses(ctx, []store.UserID{carol.ID}))[carol.ID] }
+
+	c.choose("Account menu", "Away")
+	c.until("away on the server", func() bool { return status() == store.Away })
+	c.choose("Account menu", "Do not disturb", "30 mins")
+	c.until("dnd on the server", func() bool { return status() == store.DND })
+	c.choose("Account menu", "Online")
+	c.until("online on the server", func() bool { return status() == store.Online })
+
+	c.choose("Account menu", "Set custom status")
+	c.click("Working from home")
+	c.tt.Frame()
+	c.click("Set Status")
+	c.until("custom status on the server", func() bool {
+		me := must(apiCarol.Me(ctx))
+		return me.CustomStatus != nil && me.CustomStatus.Text == "Working from home" && me.CustomStatus.Emoji == "house"
+	})
+	c.choose("Account menu", "Clear custom status")
+	c.until("custom status cleared", func() bool { return must(apiCarol.Me(ctx)).CustomStatus == nil })
+
+	c.choose("Account menu", "Profile")
+	c.tt.Key(0, ui.KeyTab)
+	c.tt.Key(0, ui.KeyTab)
+	c.tt.Type("cc")
+	c.click("Save")
+	c.until("nickname on the server", func() bool { return must(apiCarol.Me(ctx)).Nickname == "cc" })
+	if s.Me().Nickname != "cc" {
+		t.Errorf("nickname here %q", s.Me().Nickname)
+	}
+	if _, err := apiCarol.PatchMe(ctx, mm.UserPatch{FirstName: carol.FirstName, LastName: carol.LastName}); err != nil {
+		t.Fatal(err)
 	}
 }
 

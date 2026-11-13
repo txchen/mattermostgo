@@ -246,7 +246,8 @@ func (v *View) postRow(row ui.ListRow, s *app.Server, order []store.PostID, i in
 	box := ui.Box(c).FillWidth().Background(bg).ContextMenu(func(m *ui.Menu) { v.postMenu(m, c, s, post) })
 	// A click on a post opens its thread, as the webapp's "Click to open
 	// threads"; what the post holds that is clickable keeps its click.
-	if !inThread && !post.IsSystem() && post.State == store.Sent && v.editing != post.ID {
+	opens := !inThread && !post.IsSystem() && post.State == store.Sent && v.editing != post.ID
+	if opens {
 		if box.Label("Post by " + v.App.UserName(s, post.UserID)).RowClicked() {
 			v.App.OpenThread(s, post.ID)
 		}
@@ -273,7 +274,11 @@ func (v *View) postRow(row ui.ListRow, s *app.Server, order []store.PostID, i in
 				if !grouped {
 					v.postHeader(c, s, post)
 				}
-				v.postBody(c, s, post)
+				var id store.PostID
+				if opens {
+					id = post.ID
+				}
+				v.postBody(c, s, post, id)
 				if !inThread && post.RootID == "" && post.ReplyCount > 0 {
 					v.replyFooter(c, s, post)
 				}
@@ -284,6 +289,47 @@ func (v *View) postRow(row ui.ListRow, s *app.Server, order []store.PostID, i in
 		}
 	})
 }
+
+// textPress is a press of the primary button on the text of a post, and
+// textClick a click there that opens the post's thread once the frame it
+// brings is built, unless a link in the text took it.
+type textPress struct {
+	post store.PostID
+	x, y float32
+}
+
+type textClick struct {
+	server *app.Server
+	post   store.PostID
+}
+
+// opensThread makes a click on a post's selectable text open the thread
+// of the post id, when set, as a click on the rest of the post does. The
+// text keeps the pointer, so it is watched rather than asked: a press
+// that moves selects and a double click selects a word, without opening
+// anything.
+func (v *View) opensThread(text ui.Element, s *app.Server, id store.PostID) {
+	if id == "" {
+		return
+	}
+	text.ObserveInput(func(ev ui.InputEvent) {
+		switch ev.Kind {
+		case ui.InputPointerDown:
+			v.press = textPress{}
+			if ev.Button == 0 && ev.Clicks == 1 && ev.Mods == 0 {
+				v.press = textPress{post: id, x: ev.X, y: ev.Y}
+			}
+		case ui.InputPointerUp:
+			p := v.press
+			v.press = textPress{}
+			if p.post == id && ev.Button == 0 && !ev.Canceled && abs(ev.X-p.x) < 4 && abs(ev.Y-p.y) < 4 {
+				v.textClick = textClick{s, id}
+			}
+		}
+	})
+}
+
+func abs(f float32) float32 { return max(f, -f) }
 
 // replyFooter sums up a root post's thread under it, as the webapp does
 // with Collapsed Reply Threads: who replied, how many replies, and when
@@ -365,6 +411,9 @@ func (v *View) postHeader(c *ui.Context, s *app.Server, post *store.Post) {
 			name = post.Props.OverrideUsername
 		}
 		ui.Text(c, name).FontWeight(700).FontSize(15)
+		if u := s.Store.Users[post.UserID]; u != nil && !post.IsSystem() && post.Props.OverrideUsername == "" && u.CustomStatus.Shows(c.Now()) {
+			ui.Text(c, emojiText(u.CustomStatus.Emoji)).FontSize(14).Tooltip(u.CustomStatus.Text)
+		}
 		if u := s.Store.Users[post.UserID]; !post.IsSystem() && (u != nil && u.IsBot || post.Props.FromBot) {
 			ui.Text(c, "BOT").FontSize(10).FontWeight(700).Padding(1, 4).Radius(3).Background(t.Surface).TextColor(t.TextMuted)
 		}
@@ -389,7 +438,7 @@ func plainText(msg string) bool {
 	return true
 }
 
-func (v *View) postBody(c *ui.Context, s *app.Server, post *store.Post) {
+func (v *View) postBody(c *ui.Context, s *app.Server, post *store.Post, opens store.PostID) {
 	t := c.Theme()
 	if v.editing == post.ID {
 		v.editBox(c, s, post)
@@ -404,22 +453,19 @@ func (v *View) postBody(c *ui.Context, s *app.Server, post *store.Post) {
 		case post.IsSystem():
 			ui.Text(c, post.Message).FontSize(14).TextColor(t.TextMuted).Selectable()
 		case msg == "":
-		// The text takes no more width than it needs: selectable text
-		// keeps the pointer for selecting, and a click on the rest of the
-		// row opens the thread.
 		case plainText(msg):
-			ui.Text(c, msg).FontSize(15).LineHeight(1.4).Selectable().AlignSelf(ui.Start)
+			v.opensThread(ui.Text(c, msg).FontSize(15).LineHeight(1.4).Selectable(), s, opens)
 		default:
-			mdview.View(c, msg, v.markdownOptions(s)).AlignSelf(ui.Start)
+			v.opensThread(mdview.View(c, msg, v.markdownOptions(s)), s, opens)
 		}
 		if post.EditAt > 0 {
 			ui.Text(c, "Edited").FontSize(11).TextColor(t.TextMuted).Tooltip(time.UnixMilli(post.EditAt).Format("Edited Monday, January 2 at 15:04"))
 		}
 		for i, a := range post.Attachments {
-			ui.Column(c.Key(i)).Children(func() { v.attachment(c, s, a) })
+			ui.Column(c.Key(i)).Children(func() { v.attachment(c, s, a, opens) })
 		}
 		if post.Embed != nil {
-			v.embed(c, s, post.Embed)
+			v.embed(c, s, post.Embed, opens)
 		}
 		if len(post.Files) > 0 {
 			v.files(c, s, post)
@@ -454,6 +500,7 @@ func (v *View) markdownOptions(s *app.Server) *mdview.Options {
 }
 
 func (v *View) openLink(s *app.Server, link string) {
+	v.textClick = textClick{}
 	switch {
 	case strings.HasPrefix(link, markdown.MentionScheme):
 		name, _ := url.PathUnescape(strings.TrimPrefix(link, markdown.MentionScheme))
@@ -493,7 +540,15 @@ func (v *View) avatar(c *ui.Context, s *app.Server, id store.UserID, size float3
 	if cl := s.Client(); cl != nil && id != "" {
 		bmp = v.Media.Get(key, int(size*2), func(ctx context.Context) ([]byte, error) { return cl.ProfileImage(ctx, id) })
 	}
-	ui.Box(c).Size(size, size).Radius(size / 2).Clip().Shrink(0).Children(func() { ui.Avatar(c, name, bmp).Size(size, size) })
+	ui.Box(c).Size(size, size).Radius(size / 2).Clip().Shrink(0).Children(func() {
+		// The picture rounds itself: a clip alone leaves it square in a
+		// drawn menu.
+		if bmp != nil {
+			ui.Image(c, bmp).Size(size, size).Fit(ui.Cover).Radius(size / 2).Label(name)
+			return
+		}
+		ui.Avatar(c, name, nil).Size(size, size)
+	})
 }
 
 func (v *View) files(c *ui.Context, s *app.Server, post *store.Post) {
@@ -624,9 +679,11 @@ type emojiPicker struct {
 	open        bool
 	post        store.PostID
 	fromToolbar bool
-	composer    draftKey
-	query       string
-	insert      func(name string)
+	// inDialog marks the picker of the custom status dialog.
+	inDialog bool
+	composer draftKey
+	query    string
+	insert   func(name string)
 }
 
 // commonEmoji are what the picker shows before anything is typed.
