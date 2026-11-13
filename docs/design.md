@@ -61,10 +61,15 @@ Session state is an explicit sum type, not flags:
 
 ```go
 type Session interface{ isSession() }
-type LoggedOut struct{ Err error }          // shows the login form
-type NeedsMFA  struct{ LoginID string }     // shows the MFA field
-type LoggedIn  struct{ Me UserID; Token string }
+type LoggedOut struct{ Err string }                    // shows the login form
+type NeedsMFA  struct{ LoginID, Password, Err string } // shows the MFA field
+type LoggingIn struct{ Prev Session }                  // a request or the Keychain is on its way
+type LoggedIn  struct{ Client *mm.Client }             // the client holds the token
 ```
+
+The Keychain can block on a permission prompt, so it is read and
+written off the main thread (found running the app: a rebuilt, unsigned
+binary made the first read wait for the user while frames kept drawing).
 
 ## Data flow
 

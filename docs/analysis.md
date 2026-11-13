@@ -69,14 +69,23 @@ Open questions about mygo, settled by the prototype in issue 02:
 
 ## The Mattermost API surface v1 needs
 
-All *unverified*, to be confirmed in issue 01.
+Checked in issue 01 against the server source (`mattermost/mattermost`
+at 9e3a32bc, `server/channels/api4` and `server/channels/app`) and a
+running server built from it. Corrections to what this section first
+said are marked **Corrected**.
 
 - Login: `POST /api/v4/users/login` with `login_id`, `password` and the
   optional MFA `token`. The response header `Token` is the session token.
 - Me, teams, channels: `GET /api/v4/users/me`, `/users/me/teams`,
   `/users/me/teams/{team_id}/channels`, `/users/me/channels` for DMs and GMs.
-- Read state: `/users/me/teams/{team_id}/channels/members` and
-  `POST /api/v4/channels/members/me/view` to mark a channel read.
+- Read state: `GET /users/me/channel_members?page=-1` streams every
+  channel member of the user, one JSON object a line, so one request
+  covers all teams, DMs and GMs. `POST /api/v4/channels/members/me/view`
+  with `channel_id` and `collapsed_threads_supported` marks a channel read.
+- An MFA account without a code fails login with the error ID
+  `mfa.validate_token.authenticate.app_error`; a wrong code with
+  `api.user.check_user_mfa.bad_code.app_error`. The server takes each
+  TOTP code once.
 - Sidebar categories: `/users/me/teams/{team_id}/channels/categories`.
 - Posts: `GET /channels/{id}/posts?page&per_page&before`,
   `POST /posts`, `PUT /posts/{id}/patch`, `DELETE /posts/{id}`,
@@ -84,12 +93,20 @@ All *unverified*, to be confirmed in issue 01.
 - Reactions: `POST /reactions`, `DELETE /users/me/posts/{id}/reactions/{name}`.
 - Files: `POST /files`, `GET /files/{id}`, `/files/{id}/thumbnail`, `/files/{id}/preview`.
 - Users: `POST /users/ids`, `GET /users/{id}/image`, `POST /users/status/ids`.
-- WebSocket `/api/v4/websocket`, authenticated with an
-  `authentication_challenge` message. Events v1 handles: `posted`,
-  `post_edited`, `post_deleted`, `reaction_added`, `reaction_removed`,
-  `typing`, `channel_viewed`, `status_change`, `user_added`,
-  `user_removed`, `channel_created`, `channel_updated`,
-  `sidebar_category_updated`, `preferences_changed`, and `hello`.
+- WebSocket `/api/v4/websocket`. **Corrected:** the handshake takes the
+  session in an `Authorization: Bearer` header, so no
+  `authentication_challenge` is needed; `hello` confirms it. The server
+  pings every 60 s and drops a connection silent for 100 s. Events v1
+  handles: `posted` (with `mentions`, a JSON array of user IDs, written
+  as a string), `post_edited`, `post_deleted`, `reaction_added`,
+  `reaction_removed`, `typing`, `status_change`, `user_added`,
+  `user_removed`, `user_updated`, `channel_created`, `channel_updated`,
+  `channel_deleted`, `channel_member_updated`, `direct_added`,
+  `group_added`, `sidebar_category_*`, `added_to_team`, `leave_team`,
+  and `hello`. **Corrected:** a channel read elsewhere arrives as
+  `multiple_channels_viewed` with `channel_times`, not `channel_viewed`.
+  Data fields holding objects (`post`, `reaction`, `channel`,
+  `channelMember`) are JSON written as strings, except `user`.
   The client sends `user_typing`. After a reconnect the client refetches
   the open channel and the unread counts, since missed events are not replayed.
 - SSO (GitLab, Google, Office 365, SAML, OpenID). The official client opens
