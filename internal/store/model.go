@@ -58,7 +58,8 @@ type Channel struct {
 	Header      string
 	Purpose     string
 	LastPostAt  int64
-	// TotalMsgCount counts every post of the channel, replies included.
+	// TotalMsgCount counts the channel's root posts: replies count in
+	// their threads, as with Collapsed Reply Threads (ADR 0005).
 	TotalMsgCount int64
 	Deleted       bool
 	// MemberCount is 0 until the channel's stats load.
@@ -143,8 +144,11 @@ type Post struct {
 	Props     PostProps
 	Files     []FileInfo
 	Reactions []Reaction
-	// ReplyCount is how many replies a root post has.
-	ReplyCount int64
+	// ReplyCount, LastReplyAt and Participants describe a root post's
+	// thread; Participants are the users who replied, latest last.
+	ReplyCount   int64
+	LastReplyAt  int64
+	Participants []UserID
 	// PendingID is the client's ID of a post it sent, echoed by the server.
 	PendingID string
 	State     PostState

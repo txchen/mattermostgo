@@ -384,6 +384,7 @@ func (a *App) apply(s *Server, ev store.Event) {
 		var ids []store.UserID
 		for _, p := range ev.Posts {
 			ids = append(ids, p.UserID)
+			ids = append(ids, p.Participants...)
 		}
 		a.askUsers(s, ids)
 	case store.ThreadLoaded:

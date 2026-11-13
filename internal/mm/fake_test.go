@@ -93,15 +93,15 @@ func newFakeServer(t *testing.T) *fakeServer {
 		fmt.Fprint(w, `[{"id":"t1","name":"eng","display_name":"Engineering","delete_at":0},{"id":"t2","name":"old","display_name":"Old","delete_at":5}]`)
 	}))
 	mux.HandleFunc("GET /api/v4/users/me/channels", authed(func(w http.ResponseWriter, r *http.Request) {
-		fmt.Fprint(w, `[{"id":"c1","team_id":"t1","type":"O","name":"town-square","display_name":"Town Square","total_msg_count":12,"last_post_at":100,"delete_at":0},
-{"id":"d1","team_id":"","type":"D","name":"alice1__bob1","display_name":"","total_msg_count":3,"delete_at":0}]`)
+		fmt.Fprint(w, `[{"id":"c1","team_id":"t1","type":"O","name":"town-square","display_name":"Town Square","total_msg_count":15,"total_msg_count_root":12,"last_post_at":100,"delete_at":0},
+{"id":"d1","team_id":"","type":"D","name":"alice1__bob1","display_name":"","total_msg_count":3,"total_msg_count_root":3,"delete_at":0}]`)
 	}))
 	mux.HandleFunc("GET /api/v4/users/me/channel_members", authed(func(w http.ResponseWriter, r *http.Request) {
 		if r.URL.Query().Get("page") != "-1" {
 			t.Errorf("channel members page %q", r.URL.Query().Get("page"))
 		}
-		fmt.Fprint(w, `{"channel_id":"c1","user_id":"alice1","msg_count":10,"mention_count":1,"last_viewed_at":90,"notify_props":{"desktop":"default","mark_unread":"all"}}
-{"channel_id":"d1","user_id":"alice1","msg_count":3,"mention_count":0,"notify_props":{"desktop":"all","mark_unread":"mention"}}
+		fmt.Fprint(w, `{"channel_id":"c1","user_id":"alice1","msg_count":14,"mention_count":3,"msg_count_root":10,"mention_count_root":1,"last_viewed_at":90,"notify_props":{"desktop":"default","mark_unread":"all"}}
+{"channel_id":"d1","user_id":"alice1","msg_count":3,"mention_count":0,"msg_count_root":3,"mention_count_root":0,"notify_props":{"desktop":"all","mark_unread":"mention"}}
 `)
 	}))
 	mux.HandleFunc("GET /api/v4/users/me/teams/t1/channels/categories", authed(func(w http.ResponseWriter, r *http.Request) {
@@ -109,6 +109,9 @@ func newFakeServer(t *testing.T) *fakeServer {
 {"id":"cat-ch","team_id":"t1","type":"channels","display_name":"Channels","channel_ids":["c1"]}],"order":["cat-ch","cat-dm"]}`)
 	}))
 	mux.HandleFunc("GET /api/v4/channels/c1/posts", authed(func(w http.ResponseWriter, r *http.Request) {
+		if r.URL.Query().Get("collapsedThreads") != "true" {
+			t.Errorf("posts asked without collapsedThreads: %s", r.URL.RawQuery)
+		}
 		if r.URL.Query().Get("before") != "" {
 			fmt.Fprint(w, `{"order":["p0"],"posts":{"p0":{"id":"p0","channel_id":"c1","user_id":"bob1","create_at":1,"message":"first"}}}`)
 			return
@@ -117,7 +120,7 @@ func newFakeServer(t *testing.T) *fakeServer {
 "p2":{"id":"p2","channel_id":"c1","user_id":"bob1","create_at":20,"edit_at":25,"message":"**hi** @alice","props":{"from_bot":"true"},
  "metadata":{"files":[{"id":"f1","name":"cat.png","extension":"png","mime_type":"image/png","size":2048,"width":640,"height":480,"has_preview_image":true}],
  "reactions":[{"user_id":"alice1","post_id":"p2","emoji_name":"+1","create_at":30}]}},
-"p1":{"id":"p1","channel_id":"c1","user_id":"alice1","create_at":10,"message":"hello"},
+"p1":{"id":"p1","channel_id":"c1","user_id":"alice1","create_at":10,"message":"hello","reply_count":2,"last_reply_at":12,"participants":[{"id":"bob1","username":"bob"}]},
 "gone":{"id":"gone","channel_id":"c1","user_id":"alice1","create_at":15,"delete_at":16,"message":""}},"prev_post_id":"p0"}`)
 	}))
 	mux.HandleFunc("POST /api/v4/posts", authed(func(w http.ResponseWriter, r *http.Request) {

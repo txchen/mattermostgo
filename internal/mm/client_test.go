@@ -91,6 +91,9 @@ func TestPosts(t *testing.T) {
 	if p.ID != "p2" || p.EditAt != 25 || !p.Props.FromBot || len(p.Files) != 1 || !p.Files[0].IsImage() || p.Files[0].Width != 640 || len(p.Reactions) != 1 || p.Reactions[0].EmojiName != "+1" {
 		t.Errorf("%+v", p)
 	}
+	if r := page.Posts[1]; r.ReplyCount != 2 || r.LastReplyAt != 12 || len(r.Participants) != 1 || r.Participants[0] != "bob1" {
+		t.Errorf("thread of a root post: %+v", r)
+	}
 	older, err := c.Posts(ctx, "c1", "p1")
 	if err != nil || !older.Older || len(older.Posts) != 1 {
 		t.Errorf("older %v %+v", err, older)

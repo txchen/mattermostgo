@@ -226,7 +226,7 @@ func TestEverydayChat(t *testing.T) {
 
 	tl := s.Store.Timelines[dev]
 	last := tl.Order[len(tl.Order)-1]
-	api(t, base, "carol", "POST", "/reactions", map[string]any{"user_id": userByName(s, "carol"), "post_id": string(last), "emoji_name": "heart"})
+	api(t, base, "carol", "POST", "/reactions", map[string]any{"user_id": api(t, base, "carol", "GET", "/users/me", nil)["id"], "post_id": string(last), "emoji_name": "heart"})
 	c.until("reaction", func() bool { return len(s.Store.Posts[last].Reactions) == 1 })
 
 	town := channelByName(s, "town-square")
@@ -309,15 +309,6 @@ func channelByName(s *app.Server, name string) store.ChannelID {
 	for id, ch := range s.Store.Channels {
 		if ch.Name == name && (ch.TeamID == s.Team || ch.TeamID == "") {
 			return id
-		}
-	}
-	return ""
-}
-
-func userByName(s *app.Server, name string) string {
-	for id, u := range s.Store.Users {
-		if u.Username == name {
-			return string(id)
 		}
 	}
 	return ""

@@ -1,6 +1,6 @@
 # 0004. Replies show in the channel, and unread counts include them
 
-Status: accepted, 2026-11-12
+Status: superseded by [0005](0005-collapsed-reply-threads.md), 2026-11-12
 
 ## Context
 

@@ -99,6 +99,30 @@ func TestUnreadAndMentions(t *testing.T) {
 	}
 }
 
+// A reply shows in its thread, not in the channel, and counts on its
+// root, not in the channel's unread posts (Collapsed Reply Threads).
+func TestReplyStaysInThread(t *testing.T) {
+	s := loadedStore("c")
+	s.Apply(PostsLoaded{Channel: "c", Posts: []Post{post("a", "c", 1)}})
+	s.Apply(ThreadLoaded{Root: "a", Posts: []Post{post("a", "c", 1)}})
+	reply := post("r", "c", 5)
+	reply.RootID = "a"
+	s.Apply(PostCreated{Post: reply})
+	if got := order(s, "c"); !slices.Equal(got, []PostID{"a"}) {
+		t.Errorf("channel shows %v", got)
+	}
+	if got := s.Threads["a"].Order; !slices.Equal(got, []PostID{"a", "r"}) {
+		t.Errorf("thread shows %v", got)
+	}
+	root := s.Posts["a"]
+	if root.ReplyCount != 1 || root.LastReplyAt != 5 || !slices.Equal(root.Participants, []UserID{"u1"}) {
+		t.Errorf("root %+v", root)
+	}
+	if s.Unread("c") {
+		t.Error("a reply made the channel unread")
+	}
+}
+
 // Deleting a root post takes its thread with it.
 func TestDeleteRootDropsThread(t *testing.T) {
 	s := loadedStore("c")
@@ -267,6 +291,9 @@ func checkInvariants(s *Store) error {
 			used[id] = true
 			if p.ChannelID != ch {
 				return fmt.Errorf("timeline %s holds %s of %s", ch, id, p.ChannelID)
+			}
+			if p.RootID != "" {
+				return fmt.Errorf("timeline %s holds reply %s", ch, id)
 			}
 			if i > 0 && !before(s.Posts[t.Order[i-1]], p) {
 				return fmt.Errorf("timeline %s out of order at %d: %v", ch, i, t.Order)

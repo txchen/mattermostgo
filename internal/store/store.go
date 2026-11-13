@@ -244,7 +244,7 @@ func (s *Store) postsLoaded(ev PostsLoaded) {
 	}
 	t.HasOlder = ev.HasOlder
 	for _, p := range ev.Posts {
-		if p.ChannelID != ev.Channel {
+		if p.ChannelID != ev.Channel || p.RootID != "" {
 			continue
 		}
 		s.dropPending(&p)
@@ -266,6 +266,9 @@ func (s *Store) inThread(id PostID) bool {
 // It reports whether the store keeps it.
 func (s *Store) place(p *Post) bool {
 	timeline, thread := s.Timelines[p.ChannelID], s.Threads[p.RootID]
+	if p.RootID != "" {
+		timeline = nil // a channel shows its root posts; replies are in threads
+	}
 	if timeline == nil && (p.RootID == "" || thread == nil) {
 		return false
 	}
@@ -287,13 +290,21 @@ func (s *Store) postCreated(ev PostCreated) {
 	}
 	s.dropPending(&p)
 	s.place(&p)
-	if root := s.Posts[p.RootID]; root != nil {
-		root.ReplyCount++
-	}
 	if typers := s.Typing[p.ChannelID]; typers != nil {
 		delete(typers, p.UserID)
 	}
 	ch, m := s.Channels[p.ChannelID], s.Members[p.ChannelID]
+	if p.RootID != "" {
+		if root := s.Posts[p.RootID]; root != nil {
+			root.ReplyCount++
+			root.LastReplyAt = max(root.LastReplyAt, p.CreateAt)
+			root.Participants = append(slices.DeleteFunc(root.Participants, func(u UserID) bool { return u == p.UserID }), p.UserID)
+		}
+		if ch != nil {
+			ch.LastPostAt = max(ch.LastPostAt, p.CreateAt)
+		}
+		return
+	}
 	if ch == nil {
 		return
 	}

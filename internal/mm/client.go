@@ -330,7 +330,9 @@ func (c *Client) Statuses(ctx context.Context, ids []store.UserID) (map[store.Us
 // Posts fetches a page of a channel's posts before a post, or the newest
 // page when before is empty.
 func (c *Client) Posts(ctx context.Context, ch store.ChannelID, before store.PostID) (store.PostsLoaded, error) {
-	q := url.Values{"per_page": {strconv.Itoa(PageSize)}}
+	// Collapsed Reply Threads, as the webapp: root posts only, with their
+	// reply counts and participants.
+	q := url.Values{"per_page": {strconv.Itoa(PageSize)}, "collapsedThreads": {"true"}}
 	if before != "" {
 		q.Set("before", string(before))
 	}
@@ -391,7 +393,7 @@ func (c *Client) RemoveReaction(ctx context.Context, me store.UserID, post store
 
 // ViewChannel marks a channel read.
 func (c *Client) ViewChannel(ctx context.Context, ch store.ChannelID) error {
-	return c.do(ctx, "POST", "/channels/members/me/view", nil, map[string]any{"channel_id": ch, "collapsed_threads_supported": false}, nil)
+	return c.do(ctx, "POST", "/channels/members/me/view", nil, map[string]any{"channel_id": ch, "collapsed_threads_supported": true}, nil)
 }
 
 // DirectChannel returns the DM with another user, creating it if needed.

@@ -290,6 +290,12 @@ func TestThreadReply(t *testing.T) {
 		t.Errorf("sent %v", b)
 	}
 	h.settle(func() bool { return len(h.srv.Store.Threads["p1"].Order) == 3 })
+	if got := h.srv.Store.Timelines["town"].Order; len(got) != 2 {
+		t.Errorf("the reply shows in the channel: %v", got)
+	}
+	if !h.tt.HasText("1 reply") {
+		t.Errorf("no reply count under the root: %q", h.tt.Texts())
+	}
 	if err := h.tt.Click("Close thread"); err != nil {
 		t.Fatal(err)
 	}

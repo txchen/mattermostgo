@@ -46,7 +46,7 @@ type wireChannel struct {
 	Header        string `json:"header"`
 	Purpose       string `json:"purpose"`
 	LastPostAt    int64  `json:"last_post_at"`
-	TotalMsgCount int64  `json:"total_msg_count"`
+	TotalMsgCount int64  `json:"total_msg_count_root"`
 	DeleteAt      int64  `json:"delete_at"`
 }
 
@@ -61,8 +61,8 @@ func (c wireChannel) channel() store.Channel {
 type wireMember struct {
 	ChannelID    string            `json:"channel_id"`
 	LastViewedAt int64             `json:"last_viewed_at"`
-	MsgCount     int64             `json:"msg_count"`
-	MentionCount int64             `json:"mention_count"`
+	MsgCount     int64             `json:"msg_count_root"`
+	MentionCount int64             `json:"mention_count_root"`
 	NotifyProps  map[string]string `json:"notify_props"`
 }
 
@@ -144,6 +144,8 @@ type wirePost struct {
 	FileIDs       []string       `json:"file_ids"`
 	PendingPostID string         `json:"pending_post_id"`
 	ReplyCount    int64          `json:"reply_count"`
+	LastReplyAt   int64          `json:"last_reply_at"`
+	Participants  []wireUser     `json:"participants"`
 	Metadata      *struct {
 		Files     []wireFile     `json:"files"`
 		Reactions []wireReaction `json:"reactions"`
@@ -154,7 +156,10 @@ func (p wirePost) post() store.Post {
 	out := store.Post{
 		ID: store.PostID(p.ID), ChannelID: store.ChannelID(p.ChannelID), UserID: store.UserID(p.UserID),
 		RootID: store.PostID(p.RootID), CreateAt: p.CreateAt, EditAt: p.EditAt, Message: p.Message,
-		Type: p.Type, PendingID: p.PendingPostID, ReplyCount: p.ReplyCount,
+		Type: p.Type, PendingID: p.PendingPostID, ReplyCount: p.ReplyCount, LastReplyAt: p.LastReplyAt,
+	}
+	for _, u := range p.Participants {
+		out.Participants = append(out.Participants, store.UserID(u.ID))
 	}
 	if s, ok := p.Props["override_username"].(string); ok {
 		out.Props.OverrideUsername = s

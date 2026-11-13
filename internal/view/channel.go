@@ -241,7 +241,7 @@ func (v *View) postRow(row ui.ListRow, s *app.Server, order []store.PostID, i in
 			})
 			ui.Column(c).Grow(1).Shrink(1).Gap(3).Children(func() {
 				if !grouped && !post.IsSystem() {
-					v.postHeader(c, s, post, inThread)
+					v.postHeader(c, s, post)
 				}
 				v.postBody(c, s, post)
 				if !inThread && post.RootID == "" && post.ReplyCount > 0 {
@@ -255,20 +255,44 @@ func (v *View) postRow(row ui.ListRow, s *app.Server, order []store.PostID, i in
 	})
 }
 
+// replyFooter sums up a root post's thread under it, as the webapp does
+// with Collapsed Reply Threads: who replied, how many replies, and when
+// the last came. A click opens the thread in the RHS.
 func (v *View) replyFooter(c *ui.Context, s *app.Server, post *store.Post) {
+	t := c.Theme()
 	p := colors(c)
-	btn := ui.ButtonBase(c).AlignSelf(ui.Start).Padding(2, 4).Margin(2, 0, 0, -4).Radius(4).Label("Open thread")
-	if btn.Hovered() {
-		btn.Background(c.Theme().SurfaceHover)
+	btn := ui.ButtonBase(c).AlignSelf(ui.Start).Padding(3, 6).Margin(4, 0, 0, -6).Radius(4).Label("Open thread")
+	if btn.Hovered() || s.Thread == post.ID {
+		btn.Background(t.SurfaceHover)
 	}
 	btn.Children(func() {
-		ui.Row(c).Gap(6).AlignItems(ui.Center).Children(func() {
+		ui.Row(c).Gap(8).AlignItems(ui.Center).Children(func() {
+			people := post.Participants
+			if len(people) > 3 {
+				people = people[len(people)-3:]
+			}
+			if len(people) > 0 {
+				ui.Row(c).Children(func() {
+					for i := len(people) - 1; i >= 0; i-- {
+						ui.Box(c.Key(people[i])).Size(22, 22).Radius(11).Background(t.Background).Center().Margin(0, 0, 0, -6*float32(min(i, 1))).Children(func() {
+							v.avatar(c, s, people[i], 18)
+						})
+					}
+				})
+			}
 			symbol(c, "arrowshape.turn.up.left", 12, p.link)
 			label := fmt.Sprint(post.ReplyCount, " replies")
 			if post.ReplyCount == 1 {
 				label = "1 reply"
 			}
 			ui.Text(c, label).FontSize(12).FontWeight(600).TextColor(p.link)
+			if post.LastReplyAt > 0 {
+				ui.Text(c, "Last reply "+ago(c.Now(), post.LastReplyAt)).FontSize(12).TextColor(t.TextMuted)
+				// The label ticks once a minute, while it shows.
+				if c.Now().Sub(time.UnixMilli(post.LastReplyAt)) < 48*time.Hour {
+					c.After(time.Minute)
+				}
+			}
 		})
 	})
 	if btn.Clicked() {
@@ -276,9 +300,32 @@ func (v *View) replyFooter(c *ui.Context, s *app.Server, post *store.Post) {
 	}
 }
 
-func (v *View) postHeader(c *ui.Context, s *app.Server, post *store.Post, inThread bool) {
+// ago says how long before now a time in milliseconds was, as the
+// webapp's thread footers do.
+func ago(now time.Time, ms int64) string {
+	d := now.Sub(time.UnixMilli(ms))
+	switch {
+	case d < time.Minute:
+		return "just now"
+	case d < time.Hour:
+		if m := int(d.Minutes()); m > 1 {
+			return fmt.Sprint(m, " minutes ago")
+		}
+		return "a minute ago"
+	case d < 24*time.Hour:
+		if h := int(d.Hours()); h > 1 {
+			return fmt.Sprint(h, " hours ago")
+		}
+		return "an hour ago"
+	case d < 48*time.Hour:
+		return "yesterday"
+	default:
+		return fmt.Sprint(int(d.Hours()/24), " days ago")
+	}
+}
+
+func (v *View) postHeader(c *ui.Context, s *app.Server, post *store.Post) {
 	t := c.Theme()
-	p := colors(c)
 	ui.Row(c).Gap(8).AlignItems(ui.Baseline).Children(func() {
 		name := v.App.UserName(s, post.UserID)
 		if post.Props.OverrideUsername != "" {
@@ -290,17 +337,6 @@ func (v *View) postHeader(c *ui.Context, s *app.Server, post *store.Post, inThre
 		}
 		ts := time.UnixMilli(post.CreateAt)
 		ui.Text(c, ts.Format("15:04")).FontSize(12).TextColor(t.TextMuted).Tooltip(ts.Format("Monday, January 2, 2006 at 15:04"))
-		if !inThread && post.RootID != "" {
-			reply := ui.ButtonBase(c).Label("replied in a thread").Children(func() {
-				ui.Row(c).Gap(4).AlignItems(ui.Center).Children(func() {
-					symbol(c, "arrowshape.turn.up.left", 10, p.link)
-					ui.Text(c, "replied in a thread").FontSize(12).TextColor(p.link)
-				})
-			})
-			if reply.Clicked() {
-				v.App.OpenThread(s, post.RootID)
-			}
-		}
 	})
 }
 
