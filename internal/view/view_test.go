@@ -41,10 +41,43 @@ type harness struct {
 	posts chan map[string]any
 	// searches counts the user searches the view asked the server for.
 	searches int
+	// calls are the requests no handler took; replies answers them, by
+	// method and path.
+	calls   []call
+	replies map[string]string
+}
+
+type call struct {
+	key  string
+	body any
+}
+
+// called waits for a request the view made, and returns its body.
+func (h *harness) called(key string) map[string]any {
+	h.t.Helper()
+	b, _ := h.calledWith(key).(map[string]any)
+	return b
+}
+
+func (h *harness) calledWith(key string) any {
+	h.t.Helper()
+	var body any
+	found := false
+	h.settle(func() bool {
+		h.mu.Lock()
+		defer h.mu.Unlock()
+		for _, c := range h.calls {
+			if c.key == key {
+				body, found = c.body, true
+			}
+		}
+		return found
+	})
+	return body
 }
 
 func newHarness(t *testing.T) *harness {
-	h := &harness{t: t, posts: make(chan map[string]any, 8)}
+	h := &harness{t: t, posts: make(chan map[string]any, 8), replies: map[string]string{}}
 	mux := http.NewServeMux()
 	mux.HandleFunc("POST /api/v4/posts", func(w http.ResponseWriter, r *http.Request) {
 		var body map[string]any
@@ -72,7 +105,19 @@ func newHarness(t *testing.T) *harness {
 		h.mu.Unlock()
 		w.Write([]byte(`{"users":[{"id":"bob","username":"bob"},{"id":"bobby","username":"bobby"}]}`))
 	})
-	mux.HandleFunc("/", func(w http.ResponseWriter, r *http.Request) { w.WriteHeader(404) })
+	mux.HandleFunc("/", func(w http.ResponseWriter, r *http.Request) {
+		var body any
+		json.NewDecoder(r.Body).Decode(&body)
+		h.mu.Lock()
+		defer h.mu.Unlock()
+		key := r.Method + " " + r.URL.Path
+		h.calls = append(h.calls, call{key, body})
+		if reply, ok := h.replies[key]; ok {
+			w.Write([]byte(reply))
+			return
+		}
+		w.WriteHeader(404)
+	})
 	hs := httptest.NewServer(mux)
 	t.Cleanup(hs.Close)
 	u, _ := url.Parse(hs.URL)
@@ -311,6 +356,73 @@ func TestIdleAsksNoFrames(t *testing.T) {
 	if h.tt.FramePending() {
 		t.Error("idle view asks for frames")
 	}
+}
+
+// A click anywhere on a post opens its thread, as the webapp's "Click to
+// open threads"; a click on its reactions does not.
+func TestClickPostOpensThread(t *testing.T) {
+	h := newHarness(t)
+	h.srv.Store.Apply(store.ReactionAdded{Post: "p2", Reaction: store.Reaction{UserID: "bob", EmojiName: "heart"}})
+	h.tt.Frame()
+	r, _ := h.tt.Find("❤")
+	h.tt.ClickAt(r.X+r.W/2, r.Y+r.H/2)
+	h.settle(func() bool { return true })
+	if h.srv.Thread != "" {
+		t.Fatalf("a reaction's click opened thread %q", h.srv.Thread)
+	}
+	h.srv.Store.Apply(store.PostCreated{Post: store.Post{ID: "lk", ChannelID: "town", UserID: "bob", CreateAt: time.Now().UnixMilli(), Message: "read [the docs](https://example.com/docs)"}})
+	h.tt.Frame()
+	r, _ = h.tt.Find("the docs")
+	h.tt.ClickAt(r.X+r.W/2, r.Y+r.H/2)
+	h.settle(func() bool { return true })
+	if h.srv.Thread != "" {
+		t.Fatalf("a link's click opened thread %q", h.srv.Thread)
+	}
+	r, _ = h.tt.Find("hello team")
+	h.tt.ClickAt(r.X+r.W+100, r.Y+r.H/2)
+	h.settle(func() bool { return h.tt.HasText("an earlier reply") })
+	if h.srv.Thread != "p1" {
+		t.Fatalf("thread %q", h.srv.Thread)
+	}
+	h.srv.Thread = ""
+	h.tt.Frame()
+	if err := h.tt.Click("Post by bob"); err != nil {
+		t.Fatal(err)
+	}
+	h.settle(func() bool { return h.srv.Thread == "p1" })
+}
+
+// A system post is headed by the system avatar and name, as the webapp's.
+func TestSystemPostHeader(t *testing.T) {
+	h := newHarness(t)
+	h.srv.Store.Apply(store.PostCreated{Post: store.Post{ID: "sys", ChannelID: "town", UserID: "bob", Type: "system_join_channel",
+		CreateAt: time.Now().UnixMilli(), Message: "bob joined the channel."}})
+	h.tt.Frame()
+	if !h.tt.HasText("System") || !h.tt.HasText("bob joined the channel.") {
+		t.Fatalf("%q", h.tt.Texts())
+	}
+	h.snapshot("system-post")
+}
+
+// A link's preview and a webhook's attachment show under their posts.
+func TestPreviewsShow(t *testing.T) {
+	h := newHarness(t)
+	now := time.Now().UnixMilli()
+	h.srv.Store.Apply(store.PostCreated{Post: store.Post{ID: "l", ChannelID: "town", UserID: "bob", CreateAt: now,
+		Message: "see https://github.com/mattermost/mattermost",
+		Embed: &store.Embed{URL: "https://github.com/mattermost/mattermost", SiteName: "GitHub", Title: "GitHub - mattermost/mattermost",
+			Description: "Mattermost is an open source platform", Image: &store.Image{URL: "https://example.invalid/i.png", Width: 1280, Height: 640}}}})
+	h.srv.Store.Apply(store.PostCreated{Post: store.Post{ID: "w", ChannelID: "town", UserID: "bob", CreateAt: now + 1,
+		Props: store.PostProps{OverrideUsername: "ci-bot", FromBot: true},
+		Attachments: []store.Attachment{{Color: "danger", Pretext: "CI says", Title: "Build 42", TitleLink: "https://ci.example.com/42", Text: "**main** broke",
+			Fields: []store.AttachmentField{{Title: "Branch", Value: "main", Short: true}, {Title: "Took", Value: "93 s", Short: true}}, Footer: "ci.example.com"}}}})
+	h.tt.Frame()
+	for _, want := range []string{"GitHub", "GitHub - mattermost/mattermost", "Mattermost is an open source platform", "ci-bot", "CI says", "Build 42", "broke", "Branch", "93 s", "ci.example.com"} {
+		if !h.tt.HasText(want) {
+			t.Errorf("no %q in %q", want, h.tt.Texts())
+		}
+	}
+	h.snapshot("previews")
 }
 
 // The dark theme, saved for a look when MM_FRAMES is set.

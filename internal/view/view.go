@@ -47,6 +47,7 @@ type View struct {
 	toasts              []string
 	md                  map[config.ServerID]*mdview.Options
 	rhsSize             float32
+	dialog              dialog
 	// serverMenu and meMenu are the top bar's popovers.
 	serverMenu, meMenu, plusMenu bool
 }
@@ -147,6 +148,7 @@ func (v *View) Build(c *ui.Context) {
 	v.addServerDialog(c)
 	v.editServerDialog(c)
 	v.switcherDialog(c)
+	v.dialogs(c)
 }
 
 func (v *View) welcome(c *ui.Context) {

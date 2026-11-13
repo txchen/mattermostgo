@@ -126,6 +126,12 @@ func decodeEvent(raw []byte, me store.UserID, now time.Time) ([]store.Event, fet
 			return need(fetch{kind: fetchChannel, channel: channel})
 		}
 		return need(fetch{kind: fetchChannel, channel: store.ChannelID(w.ID)})
+	case "post_unread", "channel_converted":
+		id := store.ChannelID(m.str("channel_id"))
+		if id == "" {
+			id = channel
+		}
+		return need(fetch{kind: fetchChannel, channel: id})
 	case "channel_deleted":
 		return one(store.ChannelRemoved{Channel: store.ChannelID(m.str("channel_id"))})
 	case "channel_created":

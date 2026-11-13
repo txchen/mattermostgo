@@ -105,6 +105,10 @@ func (v *View) sidebarGroups(s *app.Server) []sidebarGroup {
 				placed[id] = true
 			}
 		}
+		// An empty Favorites hides, as the webapp's.
+		if cat.Type == store.CategoryFavorites && len(g.channels) == 0 {
+			continue
+		}
 		switch cat.Type {
 		case store.CategoryDirect:
 			dmIndex = len(groups)
@@ -183,7 +187,30 @@ func (v *View) sidebar(c *ui.Context, s *app.Server) {
 			teamName = t.DisplayName
 		}
 		ui.Row(c).Height(52).Padding(0, 12, 0, 16).Gap(6).AlignItems(ui.Center).Children(func() {
-			ui.Text(c, teamName).Bold().FontSize(16).TextColor(p.sidebarTextStrong).MaxLines(1).Shrink(1)
+			team := ui.ButtonBase(c).Padding(4, 6).Margin(0, 0, 0, -6).Radius(4).Shrink(1).Label("Team menu")
+			if team.Hovered() {
+				team.Background(p.sidebarHover)
+			}
+			team.Children(func() {
+				ui.Row(c).Gap(6).AlignItems(ui.Center).Children(func() {
+					ui.Text(c, teamName).Bold().FontSize(16).TextColor(p.sidebarTextStrong).MaxLines(1).Shrink(1)
+					symbol(c, "chevron.down", 10, p.sidebarText)
+				})
+			}).Menu(func(m *ui.Menu) {
+				if m.Item("Create New Channel").Chosen() {
+					v.dialog = &createChannelDialog{}
+				}
+				if m.Item("Browse Channels").Chosen() {
+					v.openBrowse(s)
+				}
+				if m.Item("Create New Category").Chosen() {
+					v.newCategory(s, "")
+				}
+				m.Separator()
+				if m.Item("Integrations").Chosen() {
+					v.openIntegrations(s)
+				}
+			})
 			ui.Spacer(c)
 			plus := ui.ButtonBase(c).Size(28, 28).Radius(14).Center().Label("New").Tooltip("Browse channels or start a DM")
 			bg := ui.RGBA(255, 255, 255, 0.08)
@@ -196,10 +223,19 @@ func (v *View) sidebar(c *ui.Context, s *app.Server) {
 			}
 			ui.Popover(c, plus, &v.plusMenu, func() {
 				menuPanel(c, 240, func() {
-					if menuRow(c, "browse", "Browse channels", "⌘K", false) {
+					if menuRow(c, "create", "Create new channel", "", false) {
 						v.plusMenu = false
-						v.switcher = switcher{open: true}
+						v.dialog = &createChannelDialog{}
 					}
+					if menuRow(c, "browse", "Browse channels", "", false) {
+						v.plusMenu = false
+						v.openBrowse(s)
+					}
+					if menuRow(c, "category", "Create new category", "", false) {
+						v.plusMenu = false
+						v.newCategory(s, "")
+					}
+					menuDivider(c)
 					if menuRow(c, "dm", "Open a direct message", "⌘K", false) {
 						v.plusMenu = false
 						v.switcher = switcher{open: true, query: "@"}
@@ -235,15 +271,20 @@ func (v *View) sidebarGroup(c *ui.Context, s *app.Server, g sidebarGroup) {
 	p := colors(c)
 	ui.Column(c.Key(g.key)).Children(func() {
 		collapsed := v.collapsed[g.key]
-		head := ui.ButtonBase(c).Padding(14, 16, 6, 12).FillWidth().Label(g.title)
-		head.Children(func() {
-			ui.Row(c).FillWidth().Gap(4).AlignItems(ui.Center).Children(func() {
+		head := ui.ButtonBase(c).Padding(14, 12, 6, 12).FillWidth().Label(g.title)
+		menu := func(m *ui.Menu) { v.categoryMenu(m, s, g.key) }
+		head.ContextMenu(menu).Children(func() {
+			ui.Row(c).FillWidth().Height(16).Gap(4).AlignItems(ui.Center).Children(func() {
 				arrow := "chevron.down"
 				if collapsed {
 					arrow = "chevron.right"
 				}
 				symbol(c, arrow, 9, p.sidebarText)
-				ui.Text(c, strings.ToUpper(g.title)).FontSize(12).FontWeight(600).LetterSpacing(0.3).TextColor(p.sidebarText)
+				ui.Text(c, strings.ToUpper(g.title)).FontSize(12).FontWeight(600).LetterSpacing(0.3).TextColor(p.sidebarText).Grow(1).MaxLines(1)
+				if head.Hovered() {
+					more := ui.ButtonBase(c).Size(20, 20).Radius(4).Center().Label("Category options").Tooltip("Category options")
+					more.Children(func() { symbol(c, "ellipsis", 11, p.sidebarText) }).Menu(menu)
+				}
 			})
 		})
 		if head.Clicked() {
@@ -269,7 +310,9 @@ func (v *View) sidebarItem(c *ui.Context, s *app.Server, id store.ChannelID) {
 	mentions := st.Mentions(id)
 	active := id == s.Channel
 	name := v.App.ChannelName(s, ch)
-	item := ui.ButtonBase(c).FillWidth().Height(32).Padding(0, 16, 0, 20).Label(name)
+	item := ui.ButtonBase(c).FillWidth().Height(32).Padding(0, 10, 0, 20).Label(name)
+	menu := func(m *ui.Menu) { v.channelMenu(m, c, s, id, false) }
+	item.ContextMenu(menu)
 	bg := ui.Transparent
 	switch {
 	case active:
@@ -296,6 +339,15 @@ func (v *View) sidebarItem(c *ui.Context, s *app.Server, id store.ChannelID) {
 			}
 			if mentions > 0 {
 				ui.Text(c, count(mentions)).FontSize(11).Bold().Padding(1, 6).MinWidth(20).TextAlign(ui.Center).Radius(9).Background(p.mentionBg).TextColor(p.mentionText)
+			}
+			if item.Hovered() {
+				more := ui.ButtonBase(c).Size(22, 22).Radius(4).Center().Label("Channel options for " + name).Tooltip("Channel options")
+				if more.Hovered() {
+					more.Background(p.sidebarHover)
+				}
+				more.Children(func() { symbol(c, "ellipsis", 12, p.sidebarTextStrong).Rotate(90) }).Menu(menu)
+			} else {
+				ui.Box(c).Size(22, 22)
 			}
 		})
 	})

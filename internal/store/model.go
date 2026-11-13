@@ -146,6 +146,9 @@ type Post struct {
 	Reactions []Reaction
 	// ReplyCount, LastReplyAt and Participants describe a root post's
 	// thread; Participants are the users who replied, latest last.
+	// Embed is the preview of the post's first link, if the server made one.
+	Embed        *Embed
+	Attachments  []Attachment
 	ReplyCount   int64
 	LastReplyAt  int64
 	Participants []UserID
@@ -157,7 +160,41 @@ type Post struct {
 // PostProps holds the post props the client shows.
 type PostProps struct {
 	OverrideUsername string
-	FromBot          bool
+	// OverrideIconURL is the picture a webhook or bot post shows instead
+	// of its user's.
+	OverrideIconURL string
+	FromBot         bool
+}
+
+// Image is a picture on the web that a post shows, with its size in
+// pixels when the server knows it.
+type Image struct {
+	URL           string
+	Width, Height int
+}
+
+// Embed is a link's preview: a page's OpenGraph card, or with ImageOnly
+// the image the link points to.
+type Embed struct {
+	URL                          string
+	SiteName, Title, Description string
+	Image                        *Image
+	ImageOnly                    bool
+}
+
+// Attachment is a message attachment, as webhooks and bots send them.
+type Attachment struct {
+	Fallback, Color, Pretext           string
+	AuthorName, AuthorLink, AuthorIcon string
+	Title, TitleLink, Text             string
+	Fields                             []AttachmentField
+	ImageURL, ThumbURL                 string
+	Footer, FooterIcon                 string
+}
+
+type AttachmentField struct {
+	Title, Value string
+	Short        bool
 }
 
 func (p *Post) IsSystem() bool { return strings.HasPrefix(p.Type, "system_") }

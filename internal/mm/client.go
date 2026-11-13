@@ -455,6 +455,34 @@ func (c *Client) ProfileImage(ctx context.Context, id store.UserID) ([]byte, err
 	return b, err
 }
 
+// WebImage fetches an image a post links to, as a link preview's. The
+// session token goes only to the server itself, as its image proxy.
+func (c *Client) WebImage(ctx context.Context, raw string) ([]byte, error) {
+	u, err := c.base.Parse(raw)
+	if err != nil {
+		return nil, err
+	}
+	if u.Scheme != "https" && u.Scheme != "http" {
+		return nil, fmt.Errorf("not a web image: %s", raw)
+	}
+	req, err := http.NewRequestWithContext(ctx, "GET", u.String(), nil)
+	if err != nil {
+		return nil, err
+	}
+	if u.Host == c.base.Host {
+		req.Header.Set("Authorization", "Bearer "+c.token)
+	}
+	res, err := c.hc.Do(req)
+	if err != nil {
+		return nil, err
+	}
+	defer res.Body.Close()
+	if res.StatusCode >= 300 {
+		return nil, fmt.Errorf("%s answered %s", u.Host, res.Status)
+	}
+	return io.ReadAll(io.LimitReader(res.Body, 16<<20))
+}
+
 // EmojiImageByName fetches the image of a custom emoji.
 func (c *Client) EmojiImageByName(ctx context.Context, name string) ([]byte, error) {
 	var w struct {

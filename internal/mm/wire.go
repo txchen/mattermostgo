@@ -4,6 +4,10 @@
 package mm
 
 import (
+	"cmp"
+	"encoding/json"
+	"fmt"
+
 	"github.com/txchen/mattermostgo/internal/store"
 )
 
@@ -147,9 +151,116 @@ type wirePost struct {
 	LastReplyAt   int64          `json:"last_reply_at"`
 	Participants  []wireUser     `json:"participants"`
 	Metadata      *struct {
-		Files     []wireFile     `json:"files"`
-		Reactions []wireReaction `json:"reactions"`
+		Files     []wireFile               `json:"files"`
+		Reactions []wireReaction           `json:"reactions"`
+		Embeds    []wireEmbed              `json:"embeds"`
+		Images    map[string]wireImageSize `json:"images"`
 	} `json:"metadata"`
+}
+
+type wireEmbed struct {
+	Type string `json:"type"`
+	URL  string `json:"url"`
+	Data *struct {
+		URL         string `json:"url"`
+		Title       string `json:"title"`
+		Description string `json:"description"`
+		SiteName    string `json:"site_name"`
+		Images      []struct {
+			URL       string `json:"url"`
+			SecureURL string `json:"secure_url"`
+			Width     int    `json:"width"`
+			Height    int    `json:"height"`
+		} `json:"images"`
+	} `json:"data"`
+}
+
+type wireImageSize struct {
+	Width  int `json:"width"`
+	Height int `json:"height"`
+}
+
+// wireAttachment is a message attachment, as webhooks and bots send them
+// in a post's props (model.SlackAttachment).
+type wireAttachment struct {
+	Fallback   string `json:"fallback"`
+	Color      string `json:"color"`
+	Pretext    string `json:"pretext"`
+	AuthorName string `json:"author_name"`
+	AuthorLink string `json:"author_link"`
+	AuthorIcon string `json:"author_icon"`
+	Title      string `json:"title"`
+	TitleLink  string `json:"title_link"`
+	Text       string `json:"text"`
+	Fields     []struct {
+		Title string `json:"title"`
+		Value any    `json:"value"`
+		Short any    `json:"short"`
+	} `json:"fields"`
+	ImageURL   string `json:"image_url"`
+	ThumbURL   string `json:"thumb_url"`
+	Footer     string `json:"footer"`
+	FooterIcon string `json:"footer_icon"`
+}
+
+// embed is the preview the webapp shows for a post's first link: a page's
+// OpenGraph card, or the image a link points to.
+func (p wirePost) embed() *store.Embed {
+	size := func(u string) (int, int) {
+		im := p.Metadata.Images[u]
+		return im.Width, im.Height
+	}
+	for _, e := range p.Metadata.Embeds {
+		switch e.Type {
+		case "image":
+			w, h := size(e.URL)
+			return &store.Embed{URL: e.URL, Image: &store.Image{URL: e.URL, Width: w, Height: h}, ImageOnly: true}
+		case "opengraph":
+			if e.Data == nil || e.Data.Title == "" && e.Data.Description == "" {
+				continue
+			}
+			out := &store.Embed{URL: e.URL, Title: e.Data.Title, Description: e.Data.Description, SiteName: e.Data.SiteName}
+			for _, im := range e.Data.Images {
+				if u := cmp.Or(im.SecureURL, im.URL); u != "" {
+					w, h := size(u)
+					out.Image = &store.Image{URL: u, Width: cmp.Or(w, im.Width), Height: cmp.Or(h, im.Height)}
+					break
+				}
+			}
+			return out
+		}
+	}
+	return nil
+}
+
+func (p wirePost) attachments() []store.Attachment {
+	raw, ok := p.Props["attachments"]
+	if !ok {
+		return nil
+	}
+	b, _ := json.Marshal(raw)
+	var ws []wireAttachment
+	if json.Unmarshal(b, &ws) != nil {
+		return nil
+	}
+	out := make([]store.Attachment, 0, len(ws))
+	for _, w := range ws {
+		a := store.Attachment{Fallback: w.Fallback, Color: w.Color, Pretext: w.Pretext, AuthorName: w.AuthorName, AuthorLink: w.AuthorLink,
+			AuthorIcon: w.AuthorIcon, Title: w.Title, TitleLink: w.TitleLink, Text: w.Text, ImageURL: w.ImageURL, ThumbURL: w.ThumbURL,
+			Footer: w.Footer, FooterIcon: w.FooterIcon}
+		for _, f := range w.Fields {
+			if f.Title == "" && f.Value == nil {
+				continue
+			}
+			value := ""
+			if f.Value != nil {
+				value = fmt.Sprint(f.Value)
+			}
+			a.Fields = append(a.Fields, store.AttachmentField{Title: f.Title, Value: value, Short: f.Short == true || f.Short == "true"})
+		}
+		out = append(out, a)
+	}
+	return out
 }
 
 func (p wirePost) post() store.Post {
@@ -164,8 +275,15 @@ func (p wirePost) post() store.Post {
 	if s, ok := p.Props["override_username"].(string); ok {
 		out.Props.OverrideUsername = s
 	}
+	if s, ok := p.Props["override_icon_url"].(string); ok {
+		out.Props.OverrideIconURL = s
+	}
 	out.Props.FromBot = p.Props["from_bot"] == "true" || p.Props["from_webhook"] == "true"
+	out.Attachments = p.attachments()
 	if p.Metadata != nil {
+		if len(out.Attachments) == 0 {
+			out.Embed = p.embed()
+		}
 		for _, f := range p.Metadata.Files {
 			out.Files = append(out.Files, f.file())
 		}

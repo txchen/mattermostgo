@@ -71,7 +71,7 @@ $A press "$(ref '"Bold"')" >/dev/null; $A type "strong$RUN" --settle >/dev/null;
 
 open_channel "Town Square"
 $A key CmdOrCtrl+K >/dev/null; sleep 0.5; $A type "random" --settle >/dev/null; $A key Enter >/dev/null; sleep 1
-heading() { $A snapshot | grep '\[heading\]' | head -1 | sed 's/.*\] "\([^"]*\)".*/\1/'; }
+heading() { $A snapshot | grep ' channel menu"' | head -1 | sed 's/.*\] "\(.*\) channel menu".*/\1/'; }
 [ "$(heading)" = "Random" ] && pass "Cmd+K opens a channel" || fail "Cmd+K opens a channel" "header $(heading)"
 $A key Alt+Up >/dev/null; sleep 1
 [ "$(heading)" = "Off-Topic" ] && pass "Option+Up opens the channel above" || fail "Option+Up opens the channel above" "header $(heading)"

@@ -73,9 +73,11 @@ Product:
 
 - Message search, saved and pinned posts, recent mentions.
 - Collapsed Reply Threads "Threads" view and following threads.
-- Channel management: create, rename, archive, members, convert.
+- Channel management beyond [webapp parity round 1](../webapp-parity/spec.md):
+  channel roles, unarchiving, converting a private channel to public.
 - Full emoji picker, custom emoji upload, skin tones.
-- Link previews (OpenGraph) and embedded YouTube.
+- Embedded YouTube and permalink previews. OpenGraph previews and message
+  attachments came with [webapp parity round 1](../webapp-parity/spec.md).
 - Interactive message attachments, buttons and menus, interactive dialogs,
   slash command autocomplete. Plain slash commands are sent as text.
 - Scheduled posts, drafts synced across devices, post priority and acknowledgements.
