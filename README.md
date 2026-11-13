@@ -96,7 +96,7 @@ Update with `brew upgrade --cask mattermost-go`.
   messages.
 - Several servers at once, each with its own login.
 
-![The same window in the One Dark theme](docs/screenshots/dark.png)
+![The Threads view and the theme settings, in One Dark](docs/screenshots/dark.png)
 
 ## Not there yet
 

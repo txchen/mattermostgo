@@ -2,7 +2,8 @@
 //
 //	go run ./scripts/screenshot -out docs/screenshots
 //
-// It writes light.png (Denim) and dark.png (One Dark) at twice the size.
+// It writes light.png (Denim: a channel and a thread) and dark.png (One
+// Dark: the Threads view and the themes in Settings) at twice the size.
 package main
 
 import (
@@ -49,13 +50,28 @@ func main() {
 		a.Theme = theme.id
 		tt := ui.NewTester(v.Build, 1500, 920)
 		tt.SetScale(2)
-		for range 6 {
-			for _, f := range queue {
-				f()
+		settle := func() {
+			for range 6 {
+				for _, f := range queue {
+					f()
+				}
+				queue = nil
+				tt.Frame()
+				time.Sleep(50 * time.Millisecond)
 			}
-			queue = nil
-			tt.Frame()
-			time.Sleep(50 * time.Millisecond)
+		}
+		settle()
+		if theme.id == "onedark" {
+			// The dark picture shows other parts: the Threads view, and the
+			// themes in Settings.
+			s.ThreadsView = true
+			settle()
+			for _, label := range []string{"Settings", "Display"} {
+				if err := tt.Click(label); err != nil {
+					log.Fatal(err)
+				}
+				settle()
+			}
 		}
 		f, err := os.Create(filepath.Join(*out, theme.file))
 		if err != nil {
@@ -111,7 +127,7 @@ func fill(s *app.Server) {
 		{ID: "chans", Type: store.CategoryChannels, DisplayName: "Channels", Channels: []store.ChannelID{"design", "incidents", "town", "lead"}},
 		{ID: "dms", Type: store.CategoryDirect, DisplayName: "Direct Messages", Sorting: "recent", Channels: []store.ChannelID{"dm-maya", "dm-leo", "dm-bot"}},
 	}})
-	st.Apply(store.ThreadsLoaded{Team: "acme", Threads: []store.ThreadState{{Root: "p2", Team: "acme", ReplyCount: 4, UnreadReplies: 2, UnreadMentions: 1, Following: true}}})
+	st.Apply(store.ThreadsLoaded{Team: "acme", Threads: []store.ThreadState{{Root: "p2", Team: "acme", ReplyCount: 4, LastReplyAt: at(9, 31), UnreadReplies: 2, UnreadMentions: 1, Participants: []store.UserID{"maya", "ines", "me"}, Following: true}}})
 	s.Team, s.Channel = "acme", "eng"
 	post := func(id, user string, h, m int, msg string) store.Post {
 		return store.Post{ID: store.PostID(id), ChannelID: "eng", UserID: store.UserID(user), CreateAt: at(h, m), Message: msg}

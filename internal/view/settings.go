@@ -189,8 +189,8 @@ func (v *View) displaySettings(c *ui.Context, s *app.Server) {
 					ui.Column(c).Gap(6).Children(func() {
 						ui.Row(c).FillWidth().Height(44).Radius(4).Clip().Children(func() {
 							if l == nil {
-								ui.Box(c).Grow(1).Background(lookFor("denim", false).pal.sidebar)
-								ui.Box(c).Grow(1).Background(lookFor("onedark", true).pal.sidebar)
+								ui.Box(c).Width(46).FillHeight().Background(lookFor("denim", false).bg)
+								ui.Box(c).Width(46).FillHeight().Background(lookFor("onedark", true).pal.topBar)
 								return
 							}
 							ui.Box(c).Width(28).FillHeight().Background(l.pal.sidebar)
