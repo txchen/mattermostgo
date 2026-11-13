@@ -67,7 +67,20 @@ server, `TestParity2API` and `TestRound3UI` in `internal/e2e`.
     private to public, an Info panel with About, Members, Files and
     bookmarks (bookmarks need an Enterprise license on the server).
 
+## Round 4 (0.4.0)
+
+1. A post sent while a channel opens stays: the newest page keeps the
+   posts newer than itself (`TestPostWhileLoadingStays`, e2e
+   `TestPostWhileOpening`, red without the fix).
+2. Performance against 0.1.1, in `.scratch/desktop-v1/run-log.md`.
+3. Jump to a post from search, links and permalinks: older pages load,
+   the post scrolls into view and glows (`TestJumpToPost`).
+4. Interactive messages: attachment buttons and menus, the dialogs
+   integrations open, ephemeral answers (e2e `TestInteractiveMessages`
+   with a real integration server).
+5. Edit incoming and outgoing webhooks, slash commands and bots
+   (e2e `TestEditIntegrations`).
+
 ## Out of scope
 
-Interactive buttons and menus in attachments, interactive dialogs,
 custom emoji upload, push and email notification settings.

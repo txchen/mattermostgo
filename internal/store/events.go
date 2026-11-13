@@ -16,6 +16,16 @@ type Loaded struct {
 	Prefs    []Preference
 }
 
+// DialogOpened asks to show an interactive dialog, which Dialog holds
+// until the view takes it with DialogTaken.
+type DialogOpened struct{ Dialog Dialog }
+
+type DialogTaken struct{}
+
+// TimelineDropped forgets the loaded posts of a channel, which load again
+// as it opens.
+type TimelineDropped struct{ Channel ChannelID }
+
 // PostsSeen keeps posts the server listed outside a timeline, as search
 // results; a post already kept stays as it is.
 type PostsSeen struct{ Posts []Post }
@@ -152,6 +162,9 @@ func (ConnChanged) isEvent()      {}
 func (ChannelStats) isEvent()     {}
 func (PrefsChanged) isEvent()     {}
 func (PostsSeen) isEvent()        {}
+func (TimelineDropped) isEvent()  {}
+func (DialogOpened) isEvent()     {}
+func (DialogTaken) isEvent()      {}
 func (ThreadsLoaded) isEvent()    {}
 func (ThreadChanged) isEvent()    {}
 func (ThreadRead) isEvent()       {}

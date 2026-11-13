@@ -128,6 +128,30 @@ func TestRound3UI(t *testing.T) {
 	must(struct{}{}, alice.SetPinned(ctx, root.ID, false))
 }
 
+// A post sent while a channel opens shows in it: the page loading the
+// channel used to replace the timeline and drop it.
+func TestPostWhileOpening(t *testing.T) {
+	base := serverURL(t)
+	ctx := context.Background()
+	bobC, _ := login(t, base, "bob")
+	c := newClient(t)
+	s := c.loginAs(base, "alice")
+	for i, name := range []string{"random", "town-square", "random", "town-square", "random"} {
+		ch := channelByName(s, name)
+		other := channelByName(s, "dev")
+		c.a.OpenChannel(s, other)
+		// Drop the timeline, as one beyond the kept ones is, so that
+		// opening loads the page again.
+		c.a.ForgetTimeline(s, ch)
+		c.a.OpenChannel(s, ch)
+		p := must(bobC.CreatePost(ctx, mm.NewPost{ChannelID: ch, Message: fmt.Sprintf("while opening %d %d", i, time.Now().UnixNano())}))
+		c.until("post kept", func() bool {
+			tl := s.Store.Timelines[ch]
+			return tl != nil && !tl.Loading && slices.Contains(tl.Order, p.ID)
+		})
+	}
+}
+
 // choosePost chooses from the context menu of the post showing text.
 func (c *client) choosePost(text string, path ...string) {
 	c.t.Helper()

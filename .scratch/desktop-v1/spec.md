@@ -77,7 +77,6 @@ Product:
   reactions and the picker).
 - Embedded YouTube and permalink previews. OpenGraph previews and message
   attachments came with [webapp parity round 1](../webapp-parity/spec.md).
-- Interactive message attachments, buttons and menus, interactive dialogs.
 - Scheduled posts, drafts synced across devices, post priority and acknowledgements.
 - Push and email notification settings, and themes from the Mattermost
   preferences (the client has its own themes).

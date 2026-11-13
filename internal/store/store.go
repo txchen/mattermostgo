@@ -32,7 +32,9 @@ type Store struct {
 	Prefs map[string]map[string]string
 	// Followed are the threads the user follows, for the Threads view.
 	Followed map[PostID]*ThreadState
-	Conn     Conn
+	// Dialog is an interactive dialog waiting to show, if any.
+	Dialog *Dialog
+	Conn   Conn
 	// recent lists the channels with a timeline, most recently loaded first.
 	recent []ChannelID
 }
@@ -163,6 +165,13 @@ func (s *Store) Apply(ev Event) {
 		}
 	case ConnChanged:
 		s.Conn = ev.Conn
+	case DialogOpened:
+		d := ev.Dialog
+		s.Dialog = &d
+	case DialogTaken:
+		s.Dialog = nil
+	case TimelineDropped:
+		s.dropTimeline(ev.Channel)
 	case PostsSeen:
 		for _, p := range ev.Posts {
 			if s.Posts[p.ID] == nil {
@@ -289,10 +298,16 @@ func (s *Store) postsLoaded(ev PostsLoaded) {
 	t.Loading = false
 	if !ev.Older {
 		s.touch(ev.Channel)
-		// Keep posts still being sent; drop the rest of the old page.
+		// Keep posts still being sent, and those newer than the page,
+		// which came over the WebSocket after the server answered; drop
+		// the rest of the old page.
+		var newest int64
+		for _, p := range ev.Posts {
+			newest = max(newest, p.CreateAt)
+		}
 		kept := t.Order[:0]
 		for _, id := range t.Order {
-			if p := s.Posts[id]; p != nil && p.State != Sent {
+			if p := s.Posts[id]; p != nil && (p.State != Sent || p.CreateAt > newest) {
 				kept = append(kept, id)
 			} else if !s.inThread(id) {
 				delete(s.Posts, id)
@@ -324,7 +339,7 @@ func (s *Store) inThread(id PostID) bool {
 // It reports whether the store keeps it.
 func (s *Store) place(p *Post) bool {
 	timeline, thread := s.Timelines[p.ChannelID], s.Threads[p.RootID]
-	if p.RootID != "" {
+	if p.RootID != "" && !p.Ephemeral {
 		timeline = nil // a channel shows its root posts; replies are in threads
 	}
 	if timeline == nil && (p.RootID == "" || thread == nil) {
@@ -348,6 +363,10 @@ func (s *Store) postCreated(ev PostCreated) {
 	}
 	s.dropPending(&p)
 	s.place(&p)
+	if p.Ephemeral {
+		// Only the user sees it: it counts nowhere.
+		return
+	}
 	if typers := s.Typing[p.ChannelID]; typers != nil {
 		delete(typers, p.UserID)
 	}

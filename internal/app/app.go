@@ -54,6 +54,9 @@ type Server struct {
 	Thread store.PostID
 	// ThreadsView shows the followed threads in place of the channel.
 	ThreadsView bool
+	// Jump is the post last jumped to, which the view scrolls to once and
+	// highlights for a while.
+	Jump Jump
 	// NewSince is when the open channel was last viewed before opening
 	// it, where the line of new posts goes; 0 when all was read.
 	NewSince int64

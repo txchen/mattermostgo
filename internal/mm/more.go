@@ -499,3 +499,34 @@ func (c *Client) SetCategoryChannels(ctx context.Context, team store.TeamID, cat
 func (c *Client) SetCategoryOrder(ctx context.Context, team store.TeamID, order []string) error {
 	return c.do(ctx, "PUT", c.categoriesPath(team)+"/order", nil, order, nil)
 }
+
+// DoAction chooses a button or a menu option of a post, which the server
+// passes to its integration.
+func (c *Client) DoAction(ctx context.Context, post store.PostID, action, selected string) error {
+	body := map[string]string{}
+	if selected != "" {
+		body["selected_option"] = selected
+	}
+	return c.do(ctx, "POST", "/posts/"+string(post)+"/actions/"+action, nil, body, nil)
+}
+
+// SubmitDialog sends an interactive dialog to its integration, which may
+// answer with errors by field name.
+func (c *Client) SubmitDialog(ctx context.Context, d store.Dialog, me store.UserID, ch store.ChannelID, team store.TeamID, values map[string]any, cancelled bool) (map[string]string, error) {
+	body := map[string]any{"url": d.URL, "callback_id": d.CallbackID, "state": d.State, "user_id": me, "channel_id": ch,
+		"team_id": team, "submission": values, "cancelled": cancelled}
+	var out struct {
+		Error  string            `json:"error"`
+		Errors map[string]string `json:"errors"`
+	}
+	if err := c.do(ctx, "POST", "/actions/dialogs/submit", nil, body, &out); err != nil {
+		return nil, err
+	}
+	if out.Error != "" {
+		if out.Errors == nil {
+			out.Errors = map[string]string{}
+		}
+		out.Errors[""] = out.Error
+	}
+	return out.Errors, nil
+}

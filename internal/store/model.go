@@ -171,6 +171,9 @@ type Post struct {
 	LastReplyAt  int64
 	Participants []UserID
 	Pinned       bool
+	// Ephemeral marks a post only the user sees, as a slash command or an
+	// integration answers; it goes as the channel loads again.
+	Ephemeral bool
 	// PendingID is the client's ID of a post it sent, echoed by the server.
 	PendingID string
 	State     PostState
@@ -209,6 +212,39 @@ type Attachment struct {
 	Fields                             []AttachmentField
 	ImageURL, ThumbURL                 string
 	Footer, FooterIcon                 string
+	Actions                            []Action
+}
+
+// Action is a button, or with Menu a menu, of an attachment, which the
+// server sends to its integration as it is chosen.
+type Action struct {
+	ID, Name, Style string
+	Menu            bool
+	// DataSource is "users" or "channels" for a menu of those, else its
+	// Options are the choices.
+	DataSource string
+	Options    []Option
+	Default    string
+	Disabled   bool
+}
+
+type Option struct{ Text, Value string }
+
+// Dialog is an interactive dialog an integration asks to show.
+type Dialog struct {
+	URL, CallbackID, Title, Introduction, SubmitLabel, State string
+	NotifyOnCancel                                           bool
+	Elements                                                 []DialogElement
+}
+
+// DialogElement is a field of a dialog: Type "text", "textarea",
+// "select", "bool" or "radio".
+type DialogElement struct {
+	Name, DisplayName, Type, Subtype, Default, Placeholder, Help string
+	Optional                                                     bool
+	MinLength, MaxLength                                         int
+	DataSource                                                   string
+	Options                                                      []Option
 }
 
 type AttachmentField struct {

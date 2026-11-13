@@ -128,6 +128,20 @@ func decodeEvent(raw []byte, me store.UserID, now time.Time) ([]store.Event, fet
 			return need(fetch{kind: fetchChannel, channel: channel})
 		}
 		return need(fetch{kind: fetchChannel, channel: store.ChannelID(w.ID)})
+	case "open_dialog":
+		var w wireDialog
+		if err := m.decode("dialog", &w); err != nil {
+			return nil, fetch{}, err
+		}
+		return one(store.DialogOpened{Dialog: w.dialog()})
+	case "ephemeral_message":
+		var p wirePost
+		if err := m.decode("post", &p); err != nil {
+			return nil, fetch{}, err
+		}
+		post := p.post()
+		post.Ephemeral = true
+		return one(store.PostCreated{Post: post})
 	case "preferences_changed", "preferences_deleted":
 		var ws []wirePref
 		if err := m.decode("preferences", &ws); err != nil {

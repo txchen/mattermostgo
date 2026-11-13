@@ -45,6 +45,24 @@ func TestPostsLoadedSortsOldestFirst(t *testing.T) {
 	}
 }
 
+// A post that arrives while the newest page loads, newer than the page,
+// stays when the page comes (found in the end-to-end test: opening a
+// channel lost the post sent meanwhile).
+func TestPostWhileLoadingStays(t *testing.T) {
+	s := loadedStore("c")
+	s.Apply(PostsLoading{Channel: "c"})
+	s.Apply(PostCreated{Post: post("new", "c", 5)})
+	s.Apply(PostsLoaded{Channel: "c", Posts: []Post{post("b", "c", 2), post("a", "c", 1)}})
+	if got := order(s, "c"); !slices.Equal(got, []PostID{"a", "b", "new"}) {
+		t.Errorf("order %v", got)
+	}
+	// A reload still drops what the server no longer has.
+	s.Apply(PostsLoaded{Channel: "c", Posts: []Post{post("new", "c", 5), post("b", "c", 2)}})
+	if got := order(s, "c"); !slices.Equal(got, []PostID{"b", "new"}) {
+		t.Errorf("after reload %v", got)
+	}
+}
+
 // The server's post replaces the pending one with the same pending ID, and
 // the server's echo of it over the WebSocket changes nothing.
 func TestPendingPostReplaced(t *testing.T) {

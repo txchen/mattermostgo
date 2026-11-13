@@ -328,6 +328,8 @@ func (v *View) dialogs(c *ui.Context) {
 			v.membersDialog(c, s, d)
 		case *integrations:
 			v.integrationsDialog(c, s, d)
+		case *interactiveDialog:
+			v.interactiveDialog(c, s, d)
 		case *settingsDialog:
 			v.settingsDialog(c, s, d)
 		case *channelNotifyDialog:

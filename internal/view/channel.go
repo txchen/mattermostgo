@@ -21,6 +21,9 @@ import (
 // QuickReactions are the emoji offered for a reaction in one click.
 var QuickReactions = []string{"+1", "white_check_mark", "heart", "joy", "tada", "eyes", "pray", "-1"}
 
+// jumpGlow is how long a post jumped to stays highlighted.
+const jumpGlow = 3 * time.Second
+
 // groupWindow is how close in time posts by one user join one group.
 const groupWindow = 5 * time.Minute
 
@@ -135,6 +138,17 @@ func (v *View) postList(c *ui.Context, s *app.Server, ch store.ChannelID, root s
 	l := v.list(s, key)
 	l.Key = func(i int) any { return postKey(s.Store.Posts[order[i]]) }
 	l.FollowEnd = true
+	// A post jumped to scrolls into the middle, once for each list.
+	if j := s.Jump; !j.At.IsZero() && v.jumped[key] != j.At {
+		target := j.Root
+		if root != "" {
+			target = j.Post
+		}
+		if i := slices.Index(order, target); i >= 0 {
+			v.jumped[key] = j.At
+			l.ScrollTo(i, ui.Center)
+		}
+	}
 	if root == "" && tl != nil && tl.HasOlder && !tl.Loading {
 		// Before its first layout a list shows no rows (last is 0).
 		if first, last := l.Visible(); last > 0 && first < 5 {
@@ -166,16 +180,18 @@ func (v *View) postList(c *ui.Context, s *app.Server, ch store.ChannelID, root s
 		})
 		if !l.AtEnd() && len(order) > 0 {
 			p := colors(c)
-			jump := ui.ButtonBase(c).Absolute().Bottom(12).Left(0).Right(0).Margin(0, ui.Auto).Height(32).Padding(0, 14).Radius(16).Background(p.buttonBg).Shadow(0, 4, 12, 0, ui.RGBA(0, 0, 0, 0.16)).Label("Jump to recent messages")
-			jump.Children(func() {
-				ui.Row(c).Gap(6).AlignItems(ui.Center).Children(func() {
-					symbol(c, "arrow.down", 11, ui.Hex("#ffffff"))
-					ui.Text(c, "Jump to recent messages").FontSize(13).FontWeight(600).TextColor(ui.Hex("#ffffff"))
+			ui.Row(c).Absolute().Bottom(12).Left(0).Right(0).Justify(ui.Center).Children(func() {
+				jump := ui.ButtonBase(c).Height(32).Padding(0, 14).Radius(16).Background(p.buttonBg).Shadow(0, 4, 12, 0, ui.RGBA(0, 0, 0, 0.16)).Label("Jump to recent messages")
+				jump.Children(func() {
+					ui.Row(c).Gap(6).AlignItems(ui.Center).Children(func() {
+						symbol(c, "arrow.down", 11, ui.Hex("#ffffff"))
+						ui.Text(c, "Jump to recent messages").FontSize(13).FontWeight(600).TextColor(ui.Hex("#ffffff"))
+					})
 				})
+				if jump.Clicked() {
+					l.ScrollToEnd()
+				}
 			})
-			if jump.Clicked() {
-				l.ScrollToEnd()
-			}
 		}
 	})
 	v.typing(c, s, ch, root)
@@ -253,7 +269,14 @@ func (v *View) postRow(row ui.ListRow, s *app.Server, order []store.PostID, i in
 	grouped := continues(prev, post) && !(inThread && i == 1)
 	hovered := row.Hovered()
 	bg := ui.Transparent
+	jump := s.Jump
+	highlight := (post.ID == jump.Post || !inThread && post.ID == jump.Root) && c.Now().Sub(jump.At) < jumpGlow
+	if highlight {
+		c.After(jumpGlow - c.Now().Sub(jump.At))
+	}
 	switch {
+	case highlight:
+		bg = p.mentionHighlight
 	case v.actionsFor == post.ID:
 		bg = t.SurfacePressed
 	case hovered:
@@ -262,7 +285,7 @@ func (v *View) postRow(row ui.ListRow, s *app.Server, order []store.PostID, i in
 	box := ui.Box(c).FillWidth().Background(bg).ContextMenu(func(m *ui.Menu) { v.postMenu(m, c, s, post, true) })
 	// A click on a post opens its thread, as the webapp's "Click to open
 	// threads"; what the post holds that is clickable keeps its click.
-	opens := !inThread && !post.IsSystem() && post.State == store.Sent && v.editing != post.ID && s.Store.Pref("display_settings", "click_to_reply") != "false"
+	opens := !inThread && !post.IsSystem() && !post.Ephemeral && post.State == store.Sent && v.editing != post.ID && s.Store.Pref("display_settings", "click_to_reply") != "false"
 	compact := s.Store.Pref("display_settings", "message_display") == "compact"
 	if opens {
 		if box.Label("Post by " + v.App.UserName(s, post.UserID)).RowClicked() {
@@ -308,7 +331,7 @@ func (v *View) postRow(row ui.ListRow, s *app.Server, order []store.PostID, i in
 				}
 			})
 		})
-		if (hovered || v.actionsFor == post.ID) && post.State == store.Sent && v.editing != post.ID && !post.IsSystem() {
+		if (hovered || v.actionsFor == post.ID) && post.State == store.Sent && v.editing != post.ID && !post.IsSystem() && !post.Ephemeral {
 			v.postActions(c, s, post, inThread)
 		}
 	})
@@ -446,6 +469,9 @@ func (v *View) postHeader(c *ui.Context, s *app.Server, post *store.Post) {
 			ui.Text(c, "BOT").FontSize(10).FontWeight(700).Padding(1, 4).Radius(3).Background(t.Surface).TextColor(t.TextMuted)
 		}
 		ts := time.UnixMilli(post.CreateAt)
+		if post.Ephemeral {
+			ui.Text(c, "(Only visible to you)").FontSize(12).TextColor(t.TextMuted)
+		}
 		ui.Text(c, v.clock(ts)).FontSize(12).TextColor(t.TextMuted).Tooltip(ts.Format("Monday, January 2, 2006 at ") + v.clock(ts))
 	})
 }
@@ -493,7 +519,7 @@ func (v *View) postBody(c *ui.Context, s *app.Server, post *store.Post, opens st
 			}
 		}
 		for i, a := range post.Attachments {
-			ui.Column(c.Key(i)).Children(func() { v.attachment(c, s, a, opens) })
+			ui.Column(c.Key(i)).Children(func() { v.attachment(c, s, post.ID, a, opens) })
 		}
 		if post.Embed != nil && s.Store.Pref("display_settings", "link_previews") != "false" {
 			v.embed(c, s, post.Embed, opens)
@@ -772,7 +798,7 @@ var remindTimes = []clearAfter{dndEnds[1], dndEnds[2], dndEnds[3], dndEnds[4]}
 // context, its context menu, which adds reactions.
 func (v *View) postMenu(m *ui.Menu, c *ui.Context, s *app.Server, post *store.Post, context bool) {
 	a := v.App
-	if post.State != store.Sent {
+	if post.State != store.Sent || post.Ephemeral {
 		return
 	}
 	if context {

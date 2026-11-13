@@ -5,6 +5,7 @@ import (
 	"net/url"
 	"os"
 	"path/filepath"
+	"slices"
 	"strconv"
 	"strings"
 	"time"
@@ -97,38 +98,65 @@ func (a *App) OpenDeepLink(link string) {
 	}
 }
 
-// OpenPost opens the channel of a post, and its thread.
+// Jump is a post to scroll to and highlight, as a permalink or a search
+// result opens it: Post, with its root in the channel.
+type Jump struct {
+	Post, Root store.PostID
+	At         time.Time
+}
+
+// OpenPost opens the channel of a post, scrolled to it and highlighted,
+// as the webapp jumps to a post; a reply opens in its thread too.
 func (a *App) OpenPost(s *Server, id store.PostID) {
 	if p := s.Store.Posts[id]; p != nil {
-		a.OpenChannel(s, p.ChannelID)
-		a.OpenThread(s, id)
+		a.jumpTo(s, *p)
 		return
 	}
-	c := s.Client()
-	if c == nil {
-		return
-	}
-	st := s.Store
-	goRun(a, func() (store.ThreadLoaded, error) {
-		ctx, cancel := context.WithTimeout(context.Background(), 30*time.Second)
-		defer cancel()
-		return c.Thread(ctx, id)
-	}, func(ev store.ThreadLoaded, err error) {
-		if s.Store != st {
-			return
-		}
-		if err != nil {
-			a.handleErr(s, err)
-			return
-		}
+	Call(a, s, func(ctx context.Context, c *mm.Client) (store.ThreadLoaded, error) { return c.Thread(ctx, id) }, func(ev store.ThreadLoaded) {
+		a.apply(s, ev)
 		for _, p := range ev.Posts {
 			if p.ID == id {
-				a.OpenChannel(s, p.ChannelID)
-				s.Thread = ev.Root
-				a.apply(s, ev)
-				return
+				a.jumpTo(s, p)
 			}
 		}
+	})
+}
+
+func (a *App) jumpTo(s *Server, p store.Post) {
+	root := p.ID
+	if p.RootID != "" {
+		root = p.RootID
+	}
+	a.OpenChannel(s, p.ChannelID)
+	if p.RootID != "" {
+		a.OpenThread(s, root)
+	}
+	a.loadUntil(s, p.ChannelID, root, 20, func() {
+		s.Jump = Jump{Post: p.ID, Root: root, At: time.Now()}
+	})
+}
+
+// loadUntil loads older pages of a channel until it holds a post, or no
+// more pages are, or tries ran out, then calls done.
+func (a *App) loadUntil(s *Server, ch store.ChannelID, id store.PostID, tries int, done func()) {
+	t := s.Store.Timelines[ch]
+	switch {
+	case t != nil && slices.Contains(t.Order, id), tries == 0:
+		done()
+		return
+	case t == nil || t.Loading || len(t.Order) == 0:
+		// The first page is on its way: look again as it comes.
+		time.AfterFunc(100*time.Millisecond, func() { a.Run(func() { a.loadUntil(s, ch, id, tries-1, done) }) })
+		return
+	case !t.HasOlder:
+		done()
+		return
+	}
+	before := t.Order[0]
+	s.Store.Apply(store.PostsLoading{Channel: ch, Older: true})
+	Call(a, s, func(ctx context.Context, c *mm.Client) (store.PostsLoaded, error) { return c.Posts(ctx, ch, before) }, func(ev store.PostsLoaded) {
+		a.apply(s, ev)
+		a.loadUntil(s, ch, id, tries-1, done)
 	})
 }
 

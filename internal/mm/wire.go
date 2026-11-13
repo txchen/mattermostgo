@@ -216,10 +216,36 @@ type wireAttachment struct {
 		Value any    `json:"value"`
 		Short any    `json:"short"`
 	} `json:"fields"`
-	ImageURL   string `json:"image_url"`
-	ThumbURL   string `json:"thumb_url"`
-	Footer     string `json:"footer"`
-	FooterIcon string `json:"footer_icon"`
+	ImageURL   string       `json:"image_url"`
+	ThumbURL   string       `json:"thumb_url"`
+	Footer     string       `json:"footer"`
+	FooterIcon string       `json:"footer_icon"`
+	Actions    []wireAction `json:"actions"`
+}
+
+// wireAction is a button or a menu of an attachment (model.PostAction).
+type wireAction struct {
+	ID            string       `json:"id"`
+	Name          string       `json:"name"`
+	Type          string       `json:"type"`
+	Style         string       `json:"style"`
+	DataSource    string       `json:"data_source"`
+	DefaultOption string       `json:"default_option"`
+	Disabled      bool         `json:"disabled"`
+	Options       []wireOption `json:"options"`
+}
+
+type wireOption struct {
+	Text  string `json:"text"`
+	Value string `json:"value"`
+}
+
+func options(ws []wireOption) []store.Option {
+	out := make([]store.Option, len(ws))
+	for i, o := range ws {
+		out[i] = store.Option{Text: o.Text, Value: o.Value}
+	}
+	return out
 }
 
 // embed is the preview the webapp shows for a post's first link: a page's
@@ -277,6 +303,13 @@ func (p wirePost) attachments() []store.Attachment {
 			}
 			a.Fields = append(a.Fields, store.AttachmentField{Title: f.Title, Value: value, Short: f.Short == true || f.Short == "true"})
 		}
+		for _, act := range w.Actions {
+			if act.ID == "" || act.Name == "" {
+				continue
+			}
+			a.Actions = append(a.Actions, store.Action{ID: act.ID, Name: act.Name, Menu: act.Type == "select", Style: act.Style,
+				DataSource: act.DataSource, Default: act.DefaultOption, Disabled: act.Disabled, Options: options(act.Options)})
+		}
 		out = append(out, a)
 	}
 	return out
@@ -300,6 +333,7 @@ func (p wirePost) post() store.Post {
 	}
 	out.Props.FromBot = p.Props["from_bot"] == "true" || p.Props["from_webhook"] == "true"
 	out.Attachments = p.attachments()
+	out.Ephemeral = p.Type == "system_ephemeral"
 	if p.Metadata != nil {
 		if len(out.Attachments) == 0 {
 			out.Embed = p.embed()
@@ -341,4 +375,44 @@ type wireError struct {
 	ID         string `json:"id"`
 	Message    string `json:"message"`
 	StatusCode int    `json:"status_code"`
+}
+
+// wireDialog is an interactive dialog an integration opens
+// (model.OpenDialogRequest).
+type wireDialog struct {
+	TriggerID string `json:"trigger_id"`
+	URL       string `json:"url"`
+	Dialog    struct {
+		CallbackID       string `json:"callback_id"`
+		Title            string `json:"title"`
+		IntroductionText string `json:"introduction_text"`
+		SubmitLabel      string `json:"submit_label"`
+		NotifyOnCancel   bool   `json:"notify_on_cancel"`
+		State            string `json:"state"`
+		Elements         []struct {
+			DisplayName string       `json:"display_name"`
+			Name        string       `json:"name"`
+			Type        string       `json:"type"`
+			SubType     string       `json:"subtype"`
+			Default     string       `json:"default"`
+			Placeholder string       `json:"placeholder"`
+			HelpText    string       `json:"help_text"`
+			Optional    bool         `json:"optional"`
+			MinLength   int          `json:"min_length"`
+			MaxLength   int          `json:"max_length"`
+			DataSource  string       `json:"data_source"`
+			Options     []wireOption `json:"options"`
+		} `json:"elements"`
+	} `json:"dialog"`
+}
+
+func (w wireDialog) dialog() store.Dialog {
+	d := store.Dialog{URL: w.URL, CallbackID: w.Dialog.CallbackID, Title: w.Dialog.Title, Introduction: w.Dialog.IntroductionText,
+		SubmitLabel: w.Dialog.SubmitLabel, NotifyOnCancel: w.Dialog.NotifyOnCancel, State: w.Dialog.State}
+	for _, e := range w.Dialog.Elements {
+		d.Elements = append(d.Elements, store.DialogElement{Name: e.Name, DisplayName: e.DisplayName, Type: e.Type, Subtype: e.SubType,
+			Default: e.Default, Placeholder: e.Placeholder, Help: e.HelpText, Optional: e.Optional, MinLength: e.MinLength,
+			MaxLength: e.MaxLength, DataSource: e.DataSource, Options: options(e.Options)})
+	}
+	return d
 }

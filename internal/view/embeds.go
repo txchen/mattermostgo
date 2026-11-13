@@ -1,8 +1,10 @@
 package view
 
 import (
+	"cmp"
 	"context"
 	"fmt"
+	"slices"
 	"strings"
 
 	"github.com/egoist/mygo/ui"
@@ -102,7 +104,7 @@ func attachmentColor(c *ui.Context, name string) ui.Color {
 
 // attachment shows a message attachment as the webapp does: a colored
 // bar, the author, title, text, fields, image and footer.
-func (v *View) attachment(c *ui.Context, s *app.Server, a store.Attachment, opens store.PostID) {
+func (v *View) attachment(c *ui.Context, s *app.Server, post store.PostID, a store.Attachment, opens store.PostID) {
 	t := c.Theme()
 	p := colors(c)
 	md := v.markdownOptions(s)
@@ -157,6 +159,9 @@ func (v *View) attachment(c *ui.Context, s *app.Server, a store.Attachment, open
 					v.openLink(s, a.ImageURL)
 				}
 			}
+			if len(a.Actions) > 0 {
+				v.attachmentActions(c, s, post, a.Actions)
+			}
 			if a.Footer != "" {
 				ui.Row(c).Gap(6).AlignItems(ui.Center).Children(func() {
 					if a.FooterIcon != "" {
@@ -193,6 +198,102 @@ func (v *View) attachmentFields(c *ui.Context, s *app.Server, fields []store.Att
 					field(fields[i])
 				}
 			})
+		}
+	})
+}
+
+// actionColor is the color of a button of an attachment, by its style.
+func actionColor(c *ui.Context, style string) ui.Color {
+	p := colors(c)
+	switch style {
+	case "primary":
+		return p.buttonBg
+	case "danger":
+		return c.Theme().Danger
+	case "good", "success":
+		return ui.Hex("#06d6a0").Mix(ui.Hex("#000000"), 0.2)
+	case "warning":
+		return ui.Hex("#ffbc1f").Mix(ui.Hex("#000000"), 0.15)
+	}
+	if strings.HasPrefix(style, "#") {
+		return ui.Hex(style)
+	}
+	return ui.Transparent
+}
+
+// attachmentActions are the buttons and menus of an attachment, as an
+// integration made them: choosing one goes to the integration.
+func (v *View) attachmentActions(c *ui.Context, s *app.Server, post store.PostID, actions []store.Action) {
+	t := c.Theme()
+	ui.Row(c).Wrap().Gap(8).Margin(2, 0, 0, 0).Children(func() {
+		for _, act := range actions {
+			if act.Menu {
+				v.actionMenu(c.Key(act.ID), s, post, act)
+				continue
+			}
+			color := actionColor(c, act.Style)
+			b := ui.ButtonBase(c.Key(act.ID)).Height(32).Padding(0, 14).Radius(4).BorderWidth(1).Label(act.Name).Disabled(act.Disabled)
+			text := color
+			if color == ui.Transparent {
+				b.BorderColor(t.Border)
+				text = t.Text
+			} else {
+				b.BorderColor(color)
+			}
+			if b.Hovered() && !act.Disabled {
+				b.Background(text.Alpha(0.08))
+			}
+			b.Children(func() { ui.Text(c, act.Name).FontSize(13).FontWeight(600).TextColor(text) })
+			if b.Clicked() && !act.Disabled {
+				v.App.DoAction(s, post, act.ID, "")
+			}
+		}
+	})
+}
+
+// actionOptions are the choices of a menu: its own, or the channels or
+// users the client knows.
+func (v *View) actionOptions(s *app.Server, source string, own []store.Option) []store.Option {
+	switch source {
+	case "channels":
+		var out []store.Option
+		for _, ch := range v.teamChannels(s, s.Team) {
+			out = append(out, store.Option{Text: ch.DisplayName, Value: string(ch.ID)})
+		}
+		return out
+	case "users":
+		var out []store.Option
+		for id, u := range s.Store.Users {
+			if !u.Deleted && !u.IsBot {
+				out = append(out, store.Option{Text: u.Username, Value: string(id)})
+			}
+		}
+		slices.SortFunc(out, func(a, b store.Option) int { return cmp.Compare(a.Text, b.Text) })
+		return out
+	}
+	return own
+}
+
+func (v *View) actionMenu(c *ui.Context, s *app.Server, post store.PostID, act store.Action) {
+	t := c.Theme()
+	opts := v.actionOptions(s, act.DataSource, act.Options)
+	label := act.Name
+	for _, o := range opts {
+		if o.Value == act.Default {
+			label = o.Text
+		}
+	}
+	b := ui.ButtonBase(c).Height(32).Padding(0, 10).Radius(4).BorderWidth(1).BorderColor(t.Border).Label(act.Name).Disabled(act.Disabled)
+	b.Children(func() {
+		ui.Row(c).Gap(8).AlignItems(ui.Center).Children(func() {
+			ui.Text(c, label).FontSize(13)
+			symbol(c, "chevron.down", 9, t.TextMuted)
+		})
+	}).Menu(func(m *ui.Menu) {
+		for _, o := range opts {
+			if m.Item(o.Text).ID(o.Value).Checked(o.Value == act.Default).Chosen() {
+				v.App.DoAction(s, post, act.ID, o.Value)
+			}
 		}
 	})
 }

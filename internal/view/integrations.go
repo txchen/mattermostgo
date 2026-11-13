@@ -43,6 +43,14 @@ type integrations struct {
 	// bot's token, with what it belongs to.
 	secret, secretFor string
 	err               string
+	// submit is the button of the open form, as it built last.
+	submit formSubmit
+}
+
+type formSubmit struct {
+	label string
+	ok    bool
+	work  func()
 }
 
 type form interface{ isForm() }
@@ -80,17 +88,31 @@ func (v *View) loadIntegrations(s *app.Server, d *integrations, tab integrationT
 	switch tab {
 	case tabIncoming:
 		app.Call(v.App, s, func(ctx context.Context, c *mm.Client) ([]mm.IncomingHook, error) { return c.IncomingHooks(ctx, team) },
-			func(hs []mm.IncomingHook) { d.incoming, d.loaded[tab] = hs, true })
+			func(hs []mm.IncomingHook) {
+				d.incoming, d.loaded[tab] = newestFirst(hs, func(h mm.IncomingHook) int64 { return h.CreateAt }), true
+			})
 	case tabOutgoing:
 		app.Call(v.App, s, func(ctx context.Context, c *mm.Client) ([]mm.OutgoingHook, error) { return c.OutgoingHooks(ctx, team) },
-			func(hs []mm.OutgoingHook) { d.outgoing, d.loaded[tab] = hs, true })
+			func(hs []mm.OutgoingHook) {
+				d.outgoing, d.loaded[tab] = newestFirst(hs, func(h mm.OutgoingHook) int64 { return h.CreateAt }), true
+			})
 	case tabCommands:
 		app.Call(v.App, s, func(ctx context.Context, c *mm.Client) ([]mm.Command, error) { return c.Commands(ctx, team) },
-			func(cs []mm.Command) { d.commands, d.loaded[tab] = cs, true })
+			func(cs []mm.Command) {
+				d.commands, d.loaded[tab] = newestFirst(cs, func(c mm.Command) int64 { return c.CreateAt }), true
+			})
 	case tabBots:
 		app.Call(v.App, s, func(ctx context.Context, c *mm.Client) ([]mm.Bot, error) { return c.Bots(ctx) },
-			func(bs []mm.Bot) { d.bots, d.loaded[tab] = bs, true })
+			func(bs []mm.Bot) {
+				d.bots, d.loaded[tab] = newestFirst(bs, func(b mm.Bot) int64 { return b.CreateAt }), true
+			})
 	}
+}
+
+// newestFirst sorts integrations by when they were made, newest first.
+func newestFirst[T any](xs []T, at func(T) int64) []T {
+	slices.SortStableFunc(xs, func(a, b T) int { return cmp.Compare(at(b), at(a)) })
+	return xs
 }
 
 // teamChannels are the channels of the team a hook may post in, by name.
@@ -168,6 +190,8 @@ func (v *View) integrationsDialog(c *ui.Context, s *app.Server, d *integrations)
 		ui.Column(c).Grow(1).Children(func() {
 			if d.adding != nil {
 				ui.Scroll(c).Grow(1).Children(func() { v.integrationForm(c, s, d) })
+				f := d.submit
+				v.formButtons(c, d, f.label, f.ok, f.work)
 				return
 			}
 			ui.Row(c).Children(func() {
@@ -234,6 +258,10 @@ func (v *View) integrationList(c *ui.Context, s *app.Server, d *integrations, ta
 		}
 		for _, h := range d.incoming {
 			integrationRow(c, h.ID, cmp.Or(h.DisplayName, "Unnamed webhook"), []string{h.Description, "Posts to " + v.channelLabel(s, h.ChannelID), cl.HookURL(h.ID)}, func() {
+				if ui.Button(c, "Edit").Label("Edit " + h.DisplayName).Clicked() {
+					d.secret, d.err = "", ""
+					d.adding = &incomingForm{hook: h, channel: v.channelLabel(s, h.ChannelID)}
+				}
 				if ui.Button(c, "Copy URL").Label("Copy URL of " + h.DisplayName).Clicked() {
 					c.WriteClipboard(cl.HookURL(h.ID))
 					c.Toast("URL copied")
@@ -249,6 +277,11 @@ func (v *View) integrationList(c *ui.Context, s *app.Server, d *integrations, ta
 		}
 		for _, h := range d.outgoing {
 			integrationRow(c, h.ID, cmp.Or(h.DisplayName, "Unnamed webhook"), []string{h.Description, "Trigger words: " + strings.Join(h.TriggerWords, ", ") + " · in " + v.channelLabel(s, h.ChannelID), strings.Join(h.CallbackURLs, ", ")}, func() {
+				if ui.Button(c, "Edit").Label("Edit " + h.DisplayName).Clicked() {
+					d.secret, d.err = "", ""
+					d.adding = &outgoingForm{hook: h, channel: v.channelLabel(s, h.ChannelID), words: strings.Join(h.TriggerWords, ", "),
+						urls: strings.Join(h.CallbackURLs, "\n"), json: h.ContentType == "application/json", startsWith: h.TriggerWhen == 1}
+				}
 				if ui.Button(c, "Copy Token").Label("Copy token of " + h.DisplayName).Clicked() {
 					c.WriteClipboard(h.Token)
 					c.Toast("Token copied")
@@ -264,6 +297,10 @@ func (v *View) integrationList(c *ui.Context, s *app.Server, d *integrations, ta
 		}
 		for _, cmd := range d.commands {
 			integrationRow(c, cmd.ID, cmp.Or(cmd.DisplayName, "/"+cmd.Trigger), []string{"/" + cmd.Trigger + " · " + cmd.Description, cmd.URL}, func() {
+				if ui.Button(c, "Edit").Label("Edit /" + cmd.Trigger).Clicked() {
+					d.secret, d.err = "", ""
+					d.adding = &commandForm{cmd: cmd, post: cmd.Method != "G"}
+				}
 				if ui.Button(c, "Copy Token").Label("Copy token of /" + cmd.Trigger).Clicked() {
 					c.WriteClipboard(cmd.Token)
 					c.Toast("Token copied")
@@ -287,6 +324,10 @@ func (v *View) integrationList(c *ui.Context, s *app.Server, d *integrations, ta
 				owner = "Managed by " + a.UserName(s, store.UserID(b.OwnerID))
 			}
 			integrationRow(c, b.UserID, cmp.Or(b.DisplayName, b.Username)+" (@"+b.Username+")", []string{b.Description, owner, state}, func() {
+				if ui.Button(c, "Edit").Label("Edit " + b.Username).Clicked() {
+					d.secret, d.err = "", ""
+					d.adding = &botForm{bot: b}
+				}
 				if b.DeleteAt == 0 && ui.Button(c, "Create Token").Label("Create token for "+b.Username).Clicked() {
 					v.createBotToken(s, d, b)
 				}
@@ -356,8 +397,9 @@ func (v *View) channelSelect(c *ui.Context, s *app.Server, d *integrations, valu
 func (v *View) integrationForm(c *ui.Context, s *app.Server, d *integrations) {
 	a := v.App
 	team := d.team
+	// The buttons go under the scrolling form, so that they always show.
 	submit := func(label string, ok bool, work func()) {
-		v.formButtons(c, d, label, ok, work)
+		d.submit = formSubmit{label, ok, work}
 	}
 	ui.Column(c).Gap(6).Padding(0, 4).Children(func() {
 		switch f := d.adding.(type) {
@@ -370,8 +412,15 @@ func (v *View) integrationForm(c *ui.Context, s *app.Server, d *integrations) {
 			field(c, "icon", "Profile picture URL", &f.hook.IconURL, "Optional")
 			submit("Save", f.hook.DisplayName != "" && f.channel != "", func() {
 				h := f.hook
-				h.ChannelID = v.channelByDisplay(s, team, f.channel)
-				app.Call(a, s, func(ctx context.Context, c *mm.Client) (mm.IncomingHook, error) { return c.CreateIncomingHook(ctx, h) }, func(nh mm.IncomingHook) {
+				if id := v.channelByDisplay(s, team, f.channel); id != "" {
+					h.ChannelID = id
+				}
+				app.Call(a, s, func(ctx context.Context, c *mm.Client) (mm.IncomingHook, error) {
+					if h.ID != "" {
+						return c.UpdateIncomingHook(ctx, h)
+					}
+					return c.CreateIncomingHook(ctx, h)
+				}, func(nh mm.IncomingHook) {
 					d.secret, d.secretFor = s.Client().HookURL(nh.ID), "Webhook URL for "+nh.DisplayName+". Post JSON such as {\"text\": \"Hello\"} to it."
 					d.adding = nil
 					v.loadIntegrations(s, d, tabIncoming)
@@ -384,13 +433,16 @@ func (v *View) integrationForm(c *ui.Context, s *app.Server, d *integrations) {
 			v.channelSelect(c, s, d, &f.channel, true)
 			field(c, "words", "Trigger words", &f.words, "One a line or comma separated")
 			ui.Checkbox(c.Key("starts"), &f.startsWith, "Trigger when the first word starts with a trigger word").Margin(4, 0)
-			ui.Text(c, "Callback URLs").FontSize(13).FontWeight(600).Margin(4, 0, 0, 0)
+			ui.Text(c, "Callback URLs").FontSize(13).FontWeight(600).Margin(4, 0, 0, 0).AccessHidden(true)
 			ui.TextArea(c.Key("urls"), &f.urls).Lines(2, 5).Label("Callback URLs").Placeholder("One a line")
 			submit("Save", f.hook.DisplayName != "" && len(lines(f.urls)) > 0 && (len(lines(f.words)) > 0 || f.channel != "Any channel"), func() {
 				h := f.hook
 				h.TeamID = string(team)
-				if f.channel != "Any channel" {
-					h.ChannelID = v.channelByDisplay(s, team, f.channel)
+				switch id := v.channelByDisplay(s, team, f.channel); {
+				case f.channel == "Any channel":
+					h.ChannelID = ""
+				case id != "":
+					h.ChannelID = id
 				}
 				h.TriggerWords, h.CallbackURLs = lines(f.words), lines(f.urls)
 				h.ContentType = "application/x-www-form-urlencoded"
@@ -400,7 +452,12 @@ func (v *View) integrationForm(c *ui.Context, s *app.Server, d *integrations) {
 				if f.startsWith {
 					h.TriggerWhen = 1
 				}
-				app.Call(a, s, func(ctx context.Context, c *mm.Client) (mm.OutgoingHook, error) { return c.CreateOutgoingHook(ctx, h) }, func(nh mm.OutgoingHook) {
+				app.Call(a, s, func(ctx context.Context, c *mm.Client) (mm.OutgoingHook, error) {
+					if h.ID != "" {
+						return c.UpdateOutgoingHook(ctx, h)
+					}
+					return c.CreateOutgoingHook(ctx, h)
+				}, func(nh mm.OutgoingHook) {
 					d.secret, d.secretFor = nh.Token, "Token of "+nh.DisplayName+": requests to the callback URLs carry it."
 					d.adding = nil
 					v.loadIntegrations(s, d, tabOutgoing)
@@ -426,7 +483,12 @@ func (v *View) integrationForm(c *ui.Context, s *app.Server, d *integrations) {
 				if f.post {
 					cmd.Method = "P"
 				}
-				app.Call(a, s, func(ctx context.Context, c *mm.Client) (mm.Command, error) { return c.CreateCommand(ctx, cmd) }, func(nc mm.Command) {
+				app.Call(a, s, func(ctx context.Context, c *mm.Client) (mm.Command, error) {
+					if cmd.ID != "" {
+						return c.UpdateCommand(ctx, cmd)
+					}
+					return c.CreateCommand(ctx, cmd)
+				}, func(nc mm.Command) {
 					d.secret, d.secretFor = nc.Token, "Token of /"+nc.Trigger+": requests to its URL carry it."
 					d.adding = nil
 					v.loadIntegrations(s, d, tabCommands)
@@ -436,6 +498,16 @@ func (v *View) integrationForm(c *ui.Context, s *app.Server, d *integrations) {
 			field(c, "user", "Username", &f.bot.Username, "lowercase, as deploy-bot").AutoFocus()
 			field(c, "name", "Display name", &f.bot.DisplayName, "Optional")
 			field(c, "desc", "Description", &f.bot.Description, "Optional")
+			if f.bot.UserID != "" {
+				submit("Save", f.bot.Username != "", func() {
+					b := f.bot
+					app.Call(a, s, func(ctx context.Context, c *mm.Client) (mm.Bot, error) { return c.UpdateBot(ctx, b) }, func(mm.Bot) {
+						d.adding = nil
+						v.loadIntegrations(s, d, tabBots)
+					})
+				})
+				return
+			}
 			ui.Text(c, "The bot joins this team, and gets an access token, shown once.").FontSize(12).TextColor(c.Theme().TextMuted)
 			submit("Create Bot Account", f.bot.Username != "", func() {
 				b := f.bot

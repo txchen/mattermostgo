@@ -2,6 +2,7 @@ package app
 
 import (
 	"context"
+	"fmt"
 	"strings"
 	"time"
 
@@ -197,7 +198,11 @@ func (a *App) RunCommand(s *Server, ch store.ChannelID, root store.PostID, text 
 					a.OpenURL(r.GotoLocation)
 				}
 			case r.Text != "" && r.ResponseType != "in_channel":
-				a.showError(r.Text)
+				// What only the user sees shows as a system post in the
+				// channel, as the webapp makes it.
+				now := time.Now().UnixMilli()
+				a.apply(s, store.PostCreated{Post: store.Post{ID: store.PostID(fmt.Sprint("ephemeral-", now)), ChannelID: ch, RootID: root,
+					Type: "system_ephemeral", Message: r.Text, CreateAt: now, Ephemeral: true}})
 			}
 		})
 }
@@ -406,4 +411,34 @@ func (a *App) DropChannel(s *Server, id store.ChannelID, category string, before
 		return
 	}
 	a.PatchCategory(s, target, map[string]any{"channel_ids": order, "sorting": "manual"})
+}
+
+// ForgetTimeline drops the loaded posts of a channel, which load again as
+// it opens.
+func (a *App) ForgetTimeline(s *Server, id store.ChannelID) {
+	a.apply(s, store.TimelineDropped{Channel: id})
+}
+
+// DoAction chooses a button, or with selected an option of a menu, of a
+// post from an integration.
+func (a *App) DoAction(s *Server, post store.PostID, action, selected string) {
+	a.do(s, func(ctx context.Context, c *mm.Client) error { return c.DoAction(ctx, post, action, selected) }, nil)
+}
+
+// TakeDialog returns the interactive dialog waiting to show, once.
+func (a *App) TakeDialog(s *Server) *store.Dialog {
+	d := s.Store.Dialog
+	if d != nil {
+		a.apply(s, store.DialogTaken{})
+	}
+	return d
+}
+
+// SubmitDialog sends a dialog to its integration; done gets the errors it
+// answered with by field, none when it took the dialog.
+func (a *App) SubmitDialog(s *Server, d store.Dialog, values map[string]any, cancelled bool, done func(map[string]string)) {
+	me, ch, team := s.Store.Me, s.Channel, s.Team
+	Call(a, s, func(ctx context.Context, c *mm.Client) (map[string]string, error) {
+		return c.SubmitDialog(ctx, d, me, ch, team, values, cancelled)
+	}, done)
 }

@@ -51,6 +51,51 @@ func fmtInt(n int64) string {
 	return string(b)
 }
 
+// Jump scrolls the channel to a post found and highlights it, loading
+// the older page that holds it.
+func TestJumpToPost(t *testing.T) {
+	h := newHarness(t)
+	base := time.Now().Add(-2 * time.Hour).UnixMilli()
+	var posts []store.Post
+	for i := 30; i < 90; i++ {
+		posts = append(posts, store.Post{ID: store.PostID("n" + itoa(int64(i))), ChannelID: "town", UserID: "bob", CreateAt: base + int64(i)*60000, Message: "newer post " + itoa(int64(i))})
+	}
+	h.srv.Store.Apply(store.PostsLoaded{Channel: "town", Posts: posts, HasOlder: true})
+	var older strings.Builder
+	older.WriteString(`{"order":[`)
+	for i := 1; i < 30; i++ {
+		if i > 1 {
+			older.WriteString(",")
+		}
+		older.WriteString(`"o` + itoa(int64(i)) + `"`)
+	}
+	older.WriteString(`],"posts":{`)
+	for i := 1; i < 30; i++ {
+		if i > 1 {
+			older.WriteString(",")
+		}
+		older.WriteString(`"o` + itoa(int64(i)) + `":{"id":"o` + itoa(int64(i)) + `","channel_id":"town","user_id":"bob","create_at":` + itoa(base+int64(i)*60000) + `,"message":"older post ` + itoa(int64(i)) + `"}`)
+	}
+	older.WriteString(`}}`)
+	h.replies["GET /api/v4/channels/town/posts"] = older.String()
+	h.replies["GET /api/v4/posts/o5/thread"] = `{"order":["o5"],"posts":{"o5":{"id":"o5","channel_id":"town","user_id":"bob","create_at":` + itoa(base+5*60000) + `,"message":"older post 5"}}}`
+	h.tt.Frame()
+	h.app.OpenPost(h.srv, "o5")
+	h.settle(func() bool { return h.tt.HasText("older post 5") })
+	r, _ := h.tt.Find("older post 5")
+	if r.Y < 100 || r.Y > 600 {
+		t.Errorf("the post is at %v, not in view", r)
+	}
+	if h.srv.Jump.Post != "o5" {
+		t.Errorf("jump %+v", h.srv.Jump)
+	}
+	h.snapshot("jump")
+	h.tt.Advance(4 * time.Second)
+	if h.tt.FramePending() {
+		t.Error("the highlight keeps asking for frames")
+	}
+}
+
 // A post saved and pinned from its menu says so, and the server hears it.
 func TestSaveAndPin(t *testing.T) {
 	h := newHarness(t)

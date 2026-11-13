@@ -172,3 +172,28 @@ The DM from bob reached the app and it asked macOS to notify; macOS
 answered "the user does not allow notifications" without a prompt, for
 the debug bundle under /tmp. The app now says once how to turn them on.
 A notification on screen is still not seen.
+
+## 0.1.1 against 0.4.0 work, same machine, 2026-11-13
+
+`scripts/perf/compare.sh` on Developer ID signed debug builds of v0.1.1
+and of the 0.4.0 tree, logged in as alice, two runs each, then
+`go test -bench ScrollBigChannel -count=5 ./internal/view` on both trees.
+
+| | 0.1.1 | 0.4.0 |
+|---|---:|---:|
+| scrolling p50, run 1 / 2 | 6.2 / 6.1 ms | 5.3 / 5.3 ms |
+| of it, build + layout p50 | 0.5 + 3.0 ms | 0.6 + 3.0 ms |
+| of it, present p50 | 1.2 ms | 0.3 ms |
+| windowless frame, median of 5 | 2.86 ms | 2.94 ms |
+| RSS after opening Big Channel | 134 MB | 146 MB |
+| RSS after scrolling all 5,000 posts | 194-196 MB | 173-175 MB |
+| idle in the background, 60 s | 0.01 s CPU, 0 frames | 0.01 s CPU, 0 frames |
+
+The work of the client per frame is the same: build and layout did not
+move, and the windowless frame is 3% slower (the new per-post parts:
+the profile buttons, the text watched for clicks, the pinned and saved
+marks). The real-window frames are faster only in the present phase,
+which the client does not do; why it dropped is not known. Opening
+costs 12 MB more, a guess being the preferences, the followed threads
+of every team and the larger emoji table loaded at start; the cause is
+not measured. Idle stays at zero frames.

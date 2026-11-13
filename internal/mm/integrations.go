@@ -12,6 +12,7 @@ import (
 
 type IncomingHook struct {
 	ID            string `json:"id,omitempty"`
+	CreateAt      int64  `json:"create_at,omitempty"`
 	TeamID        string `json:"team_id,omitempty"`
 	ChannelID     string `json:"channel_id"`
 	DisplayName   string `json:"display_name"`
@@ -23,6 +24,7 @@ type IncomingHook struct {
 
 type OutgoingHook struct {
 	ID           string   `json:"id,omitempty"`
+	CreateAt     int64    `json:"create_at,omitempty"`
 	TeamID       string   `json:"team_id"`
 	ChannelID    string   `json:"channel_id,omitempty"`
 	DisplayName  string   `json:"display_name"`
@@ -38,6 +40,7 @@ type OutgoingHook struct {
 
 type Command struct {
 	ID               string `json:"id,omitempty"`
+	CreateAt         int64  `json:"create_at,omitempty"`
 	TeamID           string `json:"team_id"`
 	Trigger          string `json:"trigger"`
 	Method           string `json:"method"`
@@ -54,6 +57,7 @@ type Command struct {
 
 type Bot struct {
 	UserID      string `json:"user_id,omitempty"`
+	CreateAt    int64  `json:"create_at,omitempty"`
 	Username    string `json:"username"`
 	DisplayName string `json:"display_name"`
 	Description string `json:"description"`
@@ -172,4 +176,30 @@ func (c *Client) RevokeToken(ctx context.Context, id string) error {
 // AddToTeam makes a user, as a new bot, a member of a team.
 func (c *Client) AddToTeam(ctx context.Context, team store.TeamID, user string) error {
 	return c.do(ctx, "POST", "/teams/"+string(team)+"/members", nil, map[string]string{"team_id": string(team), "user_id": user}, nil)
+}
+
+func (c *Client) UpdateIncomingHook(ctx context.Context, h IncomingHook) (IncomingHook, error) {
+	var out IncomingHook
+	err := c.do(ctx, "PUT", "/hooks/incoming/"+h.ID, nil, h, &out)
+	return out, err
+}
+
+func (c *Client) UpdateOutgoingHook(ctx context.Context, h OutgoingHook) (OutgoingHook, error) {
+	var out OutgoingHook
+	err := c.do(ctx, "PUT", "/hooks/outgoing/"+h.ID, nil, h, &out)
+	return out, err
+}
+
+func (c *Client) UpdateCommand(ctx context.Context, cmd Command) (Command, error) {
+	var out Command
+	err := c.do(ctx, "PUT", "/commands/"+cmd.ID, nil, cmd, &out)
+	return out, err
+}
+
+// UpdateBot changes the names and the description of a bot.
+func (c *Client) UpdateBot(ctx context.Context, b Bot) (Bot, error) {
+	var out Bot
+	body := map[string]string{"username": b.Username, "display_name": b.DisplayName, "description": b.Description}
+	err := c.do(ctx, "PUT", "/bots/"+b.UserID, nil, body, &out)
+	return out, err
 }

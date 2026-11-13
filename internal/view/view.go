@@ -2,6 +2,8 @@
 package view
 
 import (
+	"time"
+
 	"github.com/egoist/mygo/ui"
 	mdview "github.com/egoist/mygo/ui/markdown"
 
@@ -60,7 +62,9 @@ type View struct {
 	searchFocus bool
 	// window prefixes the list states of a window other than the main
 	// one while it builds, so that each window scrolls on its own.
-	window    string
+	window string
+	// jumped is the jump each list scrolled to last, by list.
+	jumped    map[string]time.Time
 	textClick textClick
 	// serverMenu and plusMenu are the popovers of the server button and
 	// the sidebar's + button.
@@ -82,6 +86,8 @@ func New(a *app.App, m *media.Cache) *View {
 	v := &View{App: a, Media: m, lists: map[listKey]*ui.ListState{}, drafts: map[draftKey]*string{},
 		complete: map[draftKey]completion{}, sent: map[draftKey]string{}, inserts: map[draftKey]string{}, attachments: map[draftKey][]attachment{}, suggest: map[draftKey]*suggestions{}, collapsed: map[string]bool{}, rhsSize: 62}
 	v.md = map[config.ServerID]*mdview.Options{}
+	v.jumped = map[string]time.Time{}
+	v.jumped = map[string]time.Time{}
 	return v
 }
 
@@ -143,6 +149,7 @@ func (v *View) Build(c *ui.Context) {
 	v.addServerDialog(c)
 	v.editServerDialog(c)
 	v.switcherDialog(c)
+	v.takeDialog(a.Current)
 	v.dialogs(c)
 	if tc := v.textClick; tc.post != "" {
 		v.textClick = textClick{}
@@ -170,7 +177,7 @@ func authPage(c *ui.Context, fn func()) {
 
 // field is a labeled text input of a form.
 func field(c *ui.Context, key, label string, value *string, placeholder string) ui.Element {
-	ui.Text(c, label).FontSize(13).FontWeight(600).Margin(4, 0, 0, 0)
+	ui.Text(c, label).FontSize(13).FontWeight(600).Margin(4, 0, 0, 0).AccessHidden(true)
 	return ui.TextInput(c.Key(key), value).Placeholder(placeholder).Label(label).Height(40).FontSize(15)
 }
 
