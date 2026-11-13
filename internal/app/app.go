@@ -52,6 +52,8 @@ type Server struct {
 	Channel store.ChannelID
 	// Thread is the root post shown in the RHS, if any.
 	Thread store.PostID
+	// ThreadsView shows the followed threads in place of the channel.
+	ThreadsView bool
 	// NewSince is when the open channel was last viewed before opening
 	// it, where the line of new posts goes; 0 when all was read.
 	NewSince int64
@@ -63,6 +65,10 @@ type Server struct {
 	seq     int
 	asked   map[store.UserID]bool
 	typedAt time.Time
+	// commands are the slash commands of each team, and emojis the
+	// custom emoji by name, loaded once.
+	commands map[store.TeamID][]mm.AutocompleteCommand
+	emojis   map[string]string
 }
 
 // Client returns the server's API client while logged in.
@@ -82,6 +88,8 @@ type Notification struct {
 	Channel store.ChannelID
 	Title   string
 	Body    string
+	// Silent leaves out the sound, as the settings may ask.
+	Silent bool
 }
 
 type App struct {
@@ -102,6 +110,13 @@ type App struct {
 	// OpenExternal opens a link in the browser, and Reveal a file in Finder.
 	OpenExternal func(url string)
 	Reveal       func(path string)
+	// QuickLook shows a file in the Quick Look panel, and OpenPath opens
+	// it in its app.
+	QuickLook func(path string) error
+	OpenPath  func(path string) error
+
+	// Theme names the look of the window, empty to follow the system.
+	Theme string
 
 	last map[config.ServerID]config.Place
 }
@@ -113,6 +128,7 @@ func (a *App) Start() error {
 		return err
 	}
 	a.last = f.Last
+	a.Theme = f.Theme
 	if a.last == nil {
 		a.last = map[config.ServerID]config.Place{}
 	}
@@ -145,7 +161,7 @@ func (a *App) Start() error {
 }
 
 func (a *App) save() {
-	f := config.File{Last: a.last}
+	f := config.File{Last: a.last, Theme: a.Theme}
 	for _, s := range a.Servers {
 		f.Servers = append(f.Servers, s.Config)
 	}
@@ -196,6 +212,12 @@ func (a *App) AddServer(name, rawURL string, done func(error)) {
 		a.save()
 		done(nil)
 	})
+}
+
+// SetTheme chooses the look of the window.
+func (a *App) SetTheme(name string) {
+	a.Theme = name
+	a.save()
 }
 
 func (a *App) EditServer(s *Server, name string) {
@@ -282,7 +304,8 @@ func (a *App) endSession(s *Server, next Session) {
 	s.Store = store.New()
 	s.Ready = false
 	s.socket = nil
-	s.Team, s.Channel, s.Thread = "", "", ""
+	s.Team, s.Channel, s.Thread, s.ThreadsView = "", "", "", false
+	s.commands, s.emojis = nil, nil
 	s.back, s.forward = nil, nil
 	a.updateBadge()
 }
@@ -333,6 +356,11 @@ func (a *App) connect(s *Server) {
 			first := !s.Ready
 			s.Ready = true
 			a.loadDMUsers(s)
+			for _, t := range s.Store.TeamOrder {
+				me, team := s.Store.Me, t
+				Call(a, s, func(ctx context.Context, c *mm.Client) (store.ThreadsLoaded, error) { return c.Threads(ctx, me, team) },
+					func(ev store.ThreadsLoaded) { a.apply(s, ev) })
+			}
 			if first {
 				a.restorePlace(s)
 			} else if reconnected && s.Channel != "" {
@@ -377,6 +405,7 @@ func (a *App) apply(s *Server, ev store.Event) {
 	switch ev := ev.(type) {
 	case store.PostCreated:
 		a.askUsers(s, []store.UserID{ev.Post.UserID})
+		a.showConversation(s, ev.Post.ChannelID)
 		if ev.Post.ChannelID == s.Channel && a.Current == s && a.focused() && ev.Post.UserID != s.Store.Me {
 			a.markViewed(s, s.Channel)
 		}
@@ -409,7 +438,8 @@ func (a *App) apply(s *Server, ev store.Event) {
 		ch, m := s.Store.Channels[notify.ChannelID], s.Store.Members[notify.ChannelID]
 		viewing := a.Current == s && s.Channel == notify.ChannelID && a.focused()
 		if shouldNotify(s.Me(), m, ch, notify, mentioned, viewing) {
-			a.Notify(Notification{Server: s.Config.ID, Channel: ch.ID, Title: a.ChannelName(s, ch), Body: a.notificationBody(s, notify)})
+			silent := s.Me() != nil && s.Me().DesktopSound == "false"
+			a.Notify(Notification{Server: s.Config.ID, Channel: ch.ID, Title: a.ChannelName(s, ch), Body: a.notificationBody(s, notify), Silent: silent})
 		}
 	}
 	a.updateBadge()
@@ -443,6 +473,13 @@ func (a *App) notificationBody(s *Server, p *store.Post) string {
 		msg = "sent a file"
 	}
 	return name + ": " + msg
+}
+
+// AskUser loads a user again, for their profile.
+func (a *App) AskUser(s *Server, id store.UserID) {
+	Call(a, s, func(ctx context.Context, c *mm.Client) ([]store.User, error) { return c.Users(ctx, []store.UserID{id}) }, func(us []store.User) {
+		a.apply(s, store.UsersLoaded{Users: us})
+	})
 }
 
 // askUsers fetches users not loaded yet, and the statuses of all of them.
@@ -584,6 +621,7 @@ func (a *App) openChannel(s *Server, id store.ChannelID) {
 	if ch.TeamID != "" {
 		s.Team = ch.TeamID
 	}
+	s.ThreadsView = false
 	if s.Channel != id {
 		s.Thread = ""
 		s.NewSince = 0
@@ -718,6 +756,10 @@ func (a *App) Wake() {
 func (a *App) Send(s *Server, ch store.ChannelID, root store.PostID, text string) {
 	text = strings.TrimRight(text, " \t\n")
 	if strings.TrimSpace(text) == "" || s.Client() == nil {
+		return
+	}
+	if strings.HasPrefix(text, "/") && !strings.HasPrefix(text, "//") {
+		a.RunCommand(s, ch, root, text)
 		return
 	}
 	s.seq++
@@ -866,6 +908,12 @@ func (a *App) OpenThread(s *Server, root store.PostID) {
 		root = p.RootID
 	}
 	s.Thread = root
+	a.readThread(s, root)
+	a.OpenThreadData(s, root)
+}
+
+// OpenThreadData loads a thread, as for a window of its own.
+func (a *App) OpenThreadData(s *Server, root store.PostID) {
 	c := s.Client()
 	if c == nil {
 		return
@@ -888,6 +936,14 @@ func (a *App) OpenThread(s *Server, root store.PostID) {
 }
 
 func (a *App) CloseThread(s *Server) { s.Thread = "" }
+
+// LoadChannel loads the posts of a channel when none are, without
+// opening it.
+func (a *App) LoadChannel(s *Server, id store.ChannelID) {
+	if t := s.Store.Timelines[id]; t == nil || len(t.Order) == 0 && !t.Loading {
+		a.fetchPosts(s, id, "")
+	}
+}
 
 // Typing tells the server, at most every few seconds, that the user types.
 func (a *App) Typing(s *Server, ch store.ChannelID, root store.PostID) {
@@ -957,6 +1013,19 @@ func (a *App) SearchUsers(s *Server, term string, done func([]store.User)) {
 // UserName is how a user shows: their username, as the webapp's default.
 func (a *App) UserName(s *Server, id store.UserID) string {
 	if u := s.Store.Users[id]; u != nil {
+		switch s.Store.Pref("display_settings", "name_format") {
+		case "full_name":
+			if n := u.FullName(); n != "" {
+				return n
+			}
+		case "nickname_full_name":
+			if u.Nickname != "" {
+				return u.Nickname
+			}
+			if n := u.FullName(); n != "" {
+				return n
+			}
+		}
 		return u.Username
 	}
 	return "Someone"

@@ -96,6 +96,9 @@ func newFakeServer(t *testing.T) *fakeServer {
 		fmt.Fprint(w, `[{"id":"c1","team_id":"t1","type":"O","name":"town-square","display_name":"Town Square","total_msg_count":15,"total_msg_count_root":12,"last_post_at":100,"delete_at":0},
 {"id":"d1","team_id":"","type":"D","name":"alice1__bob1","display_name":"","total_msg_count":3,"total_msg_count_root":3,"delete_at":0}]`)
 	}))
+	mux.HandleFunc("GET /api/v4/users/me/preferences", authed(func(w http.ResponseWriter, r *http.Request) {
+		fmt.Fprint(w, `[{"user_id":"alice1","category":"flagged_post","name":"p9","value":"true"}]`)
+	}))
 	mux.HandleFunc("GET /api/v4/users/me/channel_members", authed(func(w http.ResponseWriter, r *http.Request) {
 		if r.URL.Query().Get("page") != "-1" {
 			t.Errorf("channel members page %q", r.URL.Query().Get("page"))

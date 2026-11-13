@@ -25,6 +25,9 @@ func main() {
 		return
 	}
 	var win *mygo.Window
+	// popouts are the windows of channels and threads opened on their
+	// own, which draw again with the main window.
+	var popouts []*mygo.Window
 	a := &app.App{
 		HC:      &http.Client{Transport: netproxy.Transport()},
 		Secrets: mygo.Secrets,
@@ -34,6 +37,9 @@ func main() {
 	a.Run = func(fn func()) {
 		if win != nil {
 			win.Update(fn)
+			for _, w := range popouts {
+				w.Invalidate()
+			}
 		} else {
 			mygo.RunOnMain(fn)
 		}
@@ -61,6 +67,22 @@ func main() {
 				}()
 			},
 			ClipboardImage: mygo.Clipboard.ReadImage,
+			OpenWindow: func(title string, build func(c *ui.Context)) {
+				w := mygo.NewWindow(mygo.WindowOptions{
+					Title: title, Width: 720, Height: 760, MinWidth: 420, MinHeight: 360,
+					TitleBarStyle: mygo.TitleBarHidden, Content: ui.View(build),
+				})
+				popouts = append(popouts, w)
+				w.OnClosed(func() {
+					for i, x := range popouts {
+						if x == w {
+							popouts = append(popouts[:i], popouts[i+1:]...)
+							break
+						}
+					}
+				})
+				w.Show()
+			},
 		}
 		a.Error = func(msg string) {
 			v.ShowError(msg)
@@ -70,6 +92,8 @@ func main() {
 		}
 		a.OpenExternal = func(url string) { _ = mygo.Shell.OpenExternal(url) }
 		a.Reveal = mygo.Shell.ShowItemInFolder
+		a.QuickLook = mygo.Shell.PreviewItem
+		a.OpenPath = mygo.Shell.OpenPath
 		a.Badge = func(mentions int64, unread bool) {
 			switch {
 			case mentions > 0:
@@ -81,7 +105,7 @@ func main() {
 			}
 		}
 		a.Notify = func(n app.Notification) {
-			note := mygo.NewNotification(mygo.NotificationOptions{Title: n.Title, Body: n.Body, Group: string(n.Server) + "/" + string(n.Channel)})
+			note := mygo.NewNotification(mygo.NotificationOptions{Title: n.Title, Body: n.Body, Silent: n.Silent, Group: string(n.Server) + "/" + string(n.Channel)})
 			note.OnClick(func() {
 				a.Run(func() {
 					for _, s := range a.Servers {

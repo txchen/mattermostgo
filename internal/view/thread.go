@@ -16,15 +16,34 @@ func (v *View) thread(c *ui.Context, s *app.Server) {
 	t := c.Theme()
 	root := s.Thread
 	ui.Column(c.Key(root)).Grow(1).FillHeight().Background(t.Background).Children(func() {
-		ui.Row(c).Height(62).Padding(0, 12, 0, 20).Gap(8).AlignItems(ui.Center).BorderWidth(0, 0, 1, 0).BorderColor(t.Border).Children(func() {
+		ui.Row(c).Height(62).Padding(0, 12, 0, 16).Gap(8).AlignItems(ui.Center).BorderWidth(0, 0, 1, 0).BorderColor(t.Border).Children(func() {
+			if v.currentPanel(s) != nil && iconButton(c, "chevron.left", "Back", 13, t.TextMuted, t.SurfaceHover).Clicked() {
+				v.App.CloseThread(s)
+			}
 			ui.Text(c, "Thread").FontWeight(700).FontSize(16)
-			if ch := s.Store.Channels[s.Channel]; ch != nil {
-				ui.Text(c, v.App.ChannelName(s, ch)).FontSize(12).TextColor(t.TextMuted).MaxLines(1).Shrink(1)
+			chID := s.Channel
+			if p := s.Store.Posts[root]; p != nil {
+				chID = p.ChannelID
+			}
+			if ch := s.Store.Channels[chID]; ch != nil {
+				ui.Text(c, v.App.ChannelName(s, ch)).FontSize(12).TextColor(t.TextMuted).MaxLines(1).Shrink(1).MinWidth(0)
 			}
 			ui.Spacer(c)
-			if iconButton(c, "link", "Copy link", 14, t.TextMuted, t.SurfaceHover).Clicked() {
-				c.WriteClipboard(v.App.Permalink(s, root))
-				c.Toast("Link copied")
+			_, following := s.Store.Followed[root]
+			label := "Follow"
+			if following {
+				label = "Following"
+			}
+			follow := ui.ButtonBase(c).Padding(3, 8).Radius(4).BorderWidth(1).BorderColor(t.Border).Shrink(0).Label(label).Tooltip("Follow the thread to see it in Threads")
+			if follow.Hovered() {
+				follow.Background(t.SurfaceHover)
+			}
+			follow.Children(func() { ui.Text(c, label).FontSize(12).FontWeight(600) })
+			if follow.Clicked() {
+				v.App.SetFollowing(s, root, !following)
+			}
+			if iconButton(c, "rectangle.portrait.on.rectangle.portrait", "Open in new window", 14, t.TextMuted, t.SurfaceHover).Clicked() {
+				v.popOut(s, chID, root)
 			}
 			if iconButton(c, "xmark", "Close thread", 14, t.TextMuted, t.SurfaceHover).Clicked() {
 				v.App.CloseThread(s)

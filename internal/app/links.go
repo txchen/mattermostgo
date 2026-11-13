@@ -51,7 +51,7 @@ func (a *App) OpenPermalink(from *Server, link string) bool {
 		a.SelectServer(s)
 		switch kind {
 		case "pl":
-			a.openPost(s, store.PostID(name))
+			a.OpenPost(s, store.PostID(name))
 			return true
 		case "channels":
 			for id, ch := range s.Store.Channels {
@@ -97,8 +97,8 @@ func (a *App) OpenDeepLink(link string) {
 	}
 }
 
-// openPost opens the channel of a post, and its thread.
-func (a *App) openPost(s *Server, id store.PostID) {
+// OpenPost opens the channel of a post, and its thread.
+func (a *App) OpenPost(s *Server, id store.PostID) {
 	if p := s.Store.Posts[id]; p != nil {
 		a.OpenChannel(s, p.ChannelID)
 		a.OpenThread(s, id)
@@ -158,6 +158,60 @@ func (a *App) Download(s *Server, f store.FileInfo) {
 		}
 		if a.Reveal != nil {
 			a.Reveal(path)
+		}
+	})
+}
+
+// FetchFile saves a file of a post in a folder of the app, once, and
+// passes its path to done, for previewing or opening it.
+func (a *App) FetchFile(s *Server, f store.FileInfo, done func(path string)) {
+	c := s.Client()
+	if c == nil {
+		return
+	}
+	goRun(a, func() (string, error) {
+		dir := filepath.Join(os.TempDir(), "mattermost-go", string(f.ID))
+		path := filepath.Join(dir, filepath.Base(f.Name))
+		if _, err := os.Stat(path); err == nil {
+			return path, nil
+		}
+		ctx, cancel := context.WithTimeout(context.Background(), 10*time.Minute)
+		defer cancel()
+		data, err := c.File(ctx, f.ID, mm.FileFull)
+		if err != nil {
+			return "", err
+		}
+		if err := os.MkdirAll(dir, 0o700); err != nil {
+			return "", err
+		}
+		return path, os.WriteFile(path, data, 0o600)
+	}, func(path string, err error) {
+		if err != nil {
+			a.showError("Opening " + f.Name + ": " + err.Error())
+			return
+		}
+		done(path)
+	})
+}
+
+// QuickLookFile previews a file in the Quick Look panel, or opens it in
+// its app where Quick Look is missing.
+func (a *App) QuickLookFile(s *Server, f store.FileInfo) {
+	a.FetchFile(s, f, func(path string) {
+		if a.QuickLook != nil && a.QuickLook(path) == nil {
+			return
+		}
+		if a.OpenPath != nil {
+			_ = a.OpenPath(path)
+		}
+	})
+}
+
+// OpenFile opens a file in its app.
+func (a *App) OpenFile(s *Server, f store.FileInfo) {
+	a.FetchFile(s, f, func(path string) {
+		if a.OpenPath != nil {
+			_ = a.OpenPath(path)
 		}
 	})
 }

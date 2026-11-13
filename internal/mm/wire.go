@@ -26,6 +26,7 @@ type wireUser struct {
 	LastPictureUpdate int64             `json:"last_picture_update"`
 	NotifyProps       map[string]string `json:"notify_props"`
 	Position          string            `json:"position"`
+	MFAActive         bool              `json:"mfa_active"`
 	Email             string            `json:"email"`
 	Props             map[string]string `json:"props"`
 }
@@ -47,7 +48,7 @@ func (u wireUser) user() store.User {
 	return store.User{
 		ID: store.UserID(u.ID), Username: u.Username, FirstName: u.FirstName, LastName: u.LastName,
 		Nickname: u.Nickname, IsBot: u.IsBot, Deleted: u.DeleteAt != 0, PictureAt: u.LastPictureUpdate,
-		DesktopNotify: u.NotifyProps["desktop"], Position: u.Position, Email: u.Email, CustomStatus: u.customStatus(),
+		DesktopNotify: u.NotifyProps["desktop"], DesktopSound: u.NotifyProps["desktop_sound"], Position: u.Position, Email: u.Email, MFAActive: u.MFAActive, CustomStatus: u.customStatus(),
 	}
 }
 
@@ -166,6 +167,7 @@ type wirePost struct {
 	PendingPostID string         `json:"pending_post_id"`
 	ReplyCount    int64          `json:"reply_count"`
 	LastReplyAt   int64          `json:"last_reply_at"`
+	IsPinned      bool           `json:"is_pinned"`
 	Participants  []wireUser     `json:"participants"`
 	Metadata      *struct {
 		Files     []wireFile               `json:"files"`
@@ -285,6 +287,7 @@ func (p wirePost) post() store.Post {
 		ID: store.PostID(p.ID), ChannelID: store.ChannelID(p.ChannelID), UserID: store.UserID(p.UserID),
 		RootID: store.PostID(p.RootID), CreateAt: p.CreateAt, EditAt: p.EditAt, Message: p.Message,
 		Type: p.Type, PendingID: p.PendingPostID, ReplyCount: p.ReplyCount, LastReplyAt: p.LastReplyAt,
+		Pinned: p.IsPinned,
 	}
 	for _, u := range p.Participants {
 		out.Participants = append(out.Participants, store.UserID(u.ID))

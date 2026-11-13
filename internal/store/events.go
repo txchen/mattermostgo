@@ -13,6 +13,33 @@ type Loaded struct {
 	Teams    []Team
 	Channels []Channel
 	Members  []ChannelMember
+	Prefs    []Preference
+}
+
+// PostsSeen keeps posts the server listed outside a timeline, as search
+// results; a post already kept stays as it is.
+type PostsSeen struct{ Posts []Post }
+
+// PrefsChanged sets preferences, or with Deleted removes them.
+type PrefsChanged struct {
+	Prefs   []Preference
+	Deleted bool
+}
+
+// ThreadsLoaded replaces the followed threads of a team, with their roots.
+type ThreadsLoaded struct {
+	Team    TeamID
+	Threads []ThreadState
+	Posts   []Post
+}
+
+// ThreadChanged updates a followed thread; one not followed is dropped.
+type ThreadChanged struct{ Thread ThreadState }
+
+type ThreadRead struct {
+	Root                          PostID
+	LastViewedAt                  int64
+	UnreadReplies, UnreadMentions int64
 }
 
 type CategoriesLoaded struct {
@@ -123,3 +150,8 @@ func (ChannelRemoved) isEvent()   {}
 func (Typing) isEvent()           {}
 func (ConnChanged) isEvent()      {}
 func (ChannelStats) isEvent()     {}
+func (PrefsChanged) isEvent()     {}
+func (PostsSeen) isEvent()        {}
+func (ThreadsLoaded) isEvent()    {}
+func (ThreadChanged) isEvent()    {}
+func (ThreadRead) isEvent()       {}

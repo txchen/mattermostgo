@@ -257,6 +257,9 @@ func (v *View) profileDialog(c *ui.Context, s *app.Server, d *profileDialog) {
 				if me.Email != "" {
 					ui.Text(c, me.Email).FontSize(12).TextColor(t.TextMuted)
 				}
+				if ui.Link(c, "Change picture", "").FontSize(12).Clicked() {
+					v.changePicture(s)
+				}
 			})
 		})
 		first := field(c, "first", "First name", &d.patch.FirstName, "").AutoFocus()

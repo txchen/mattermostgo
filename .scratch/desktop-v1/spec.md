@@ -71,24 +71,20 @@ Sign-in and network:
 
 Product:
 
-- Message search, saved and pinned posts, recent mentions.
-- Collapsed Reply Threads "Threads" view and following threads.
 - Channel management beyond [webapp parity round 1](../webapp-parity/spec.md):
   channel roles, unarchiving, converting a private channel to public.
-- Full emoji picker, custom emoji upload, skin tones.
+- Custom emoji upload, and custom emoji inline in messages (they show in
+  reactions and the picker).
 - Embedded YouTube and permalink previews. OpenGraph previews and message
   attachments came with [webapp parity round 1](../webapp-parity/spec.md).
-- Interactive message attachments, buttons and menus, interactive dialogs,
-  slash command autocomplete. Plain slash commands are sent as text.
+- Interactive message attachments, buttons and menus, interactive dialogs.
 - Scheduled posts, drafts synced across devices, post priority and acknowledgements.
-- User profile and account settings editing, notification settings UI
-  (v1 reads the server's settings but does not edit them).
-- Custom themes from the user's Mattermost preferences.
+- Push and email notification settings, and themes from the Mattermost
+  preferences (the client has its own themes).
 - Calls, Boards, Playbooks and any plugin UI.
 - Downloads manager window (v1 saves to Downloads and reveals in Finder).
 - Spell check, if mygo text input does not provide it.
 - LaTeX, inline images in Markdown from external hosts beyond a size cap.
-- Pop-out windows for channels or threads.
 
 Platform:
 

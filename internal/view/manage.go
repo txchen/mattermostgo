@@ -2,6 +2,7 @@ package view
 
 import (
 	"cmp"
+	"context"
 	"fmt"
 	"slices"
 	"strings"
@@ -45,6 +46,10 @@ type browseDialog struct {
 	query    string
 	channels []store.Channel
 	loaded   bool
+	// archived shows the archived channels, loaded on first asking.
+	archived       bool
+	archivedList   []store.Channel
+	archivedLoaded bool
 }
 
 type addMembersDialog struct {
@@ -101,6 +106,30 @@ func (v *View) channelMenu(m *ui.Menu, c *ui.Context, s *app.Server, id store.Ch
 	}
 	member := st.Members[id]
 	dm := ch.Type == store.Direct || ch.Type == store.Group
+	if ch.Deleted {
+		if m.Item("Unarchive Channel").Chosen() {
+			a.RestoreChannel(s, id)
+		}
+		if m.Item("Copy Link").Chosen() {
+			c.WriteClipboard(a.ChannelLink(s, id))
+		}
+		return
+	}
+	if m.Item("Open in New Window").Chosen() {
+		v.popOut(s, id, "")
+	}
+	m.Separator()
+	if header {
+		if m.Item("View Info").Chosen() {
+			v.openInfo(s, id, 0)
+		}
+		if m.Item("Pinned Messages").Chosen() {
+			v.openPinned(s, id)
+		}
+		if m.Item("Notification Preferences").Chosen() {
+			v.openChannelNotify(s, id)
+		}
+	}
 	if header && !dm {
 		if m.Item("View Members").Chosen() {
 			v.openMembers(s, id)
@@ -122,7 +151,11 @@ func (v *View) channelMenu(m *ui.Menu, c *ui.Context, s *app.Server, id store.Ch
 		}
 		if ch.Type == store.Open && ch.Name != "town-square" && m.Item("Convert to Private Channel").Chosen() {
 			v.dialog = &confirmDialog{title: "Convert " + a.ChannelName(s, ch) + " to a private channel?", action: "Convert to Private Channel",
-				body: "Only its members will see and join it. You cannot make it public again here.", do: func() { a.MakePrivate(s, id) }}
+				body: "Only its members will see and join it.", do: func() { a.MakePrivate(s, id) }}
+		}
+		if ch.Type == store.Private && m.Item("Convert to Public Channel").Chosen() {
+			v.dialog = &confirmDialog{title: "Convert " + a.ChannelName(s, ch) + " to a public channel?", action: "Convert to Public Channel",
+				body: "Anyone in the team will see and join it, and read its history.", do: func() { a.MakePublic(s, id) }}
 		}
 		m.Separator()
 	}
@@ -177,7 +210,14 @@ func (v *View) channelMenu(m *ui.Menu, c *ui.Context, s *app.Server, id store.Ch
 	if !header && !dm && m.Item("Add Members").Chosen() {
 		v.openAddMembers(s, id)
 	}
-	if dm || ch.Name == "town-square" {
+	if dm {
+		m.Separator()
+		if m.Item("Close Conversation").Chosen() {
+			a.CloseConversation(s, id)
+		}
+		return
+	}
+	if ch.Name == "town-square" {
 		return
 	}
 	m.Separator()
@@ -212,6 +252,24 @@ func (v *View) categoryMenu(m *ui.Menu, s *app.Server, key string) {
 		if m.Item("Delete Category").Chosen() {
 			v.dialog = &confirmDialog{title: "Delete " + cat.DisplayName + "?", action: "Delete",
 				body: "Its channels move back to Channels and Direct Messages.", do: func() { a.DeleteCategory(s, cat) }}
+		}
+		m.Separator()
+	}
+	if cat != nil {
+		m.Submenu("Sort", func(m *ui.Menu) {
+			for _, o := range [][2]string{{"alpha", "Alphabetically"}, {"recent", "Recent activity"}, {"manual", "Manually"}} {
+				current := cat.Sorting == o[0] || cat.Sorting == "" && (o[0] == "alpha" && cat.Type != store.CategoryDirect || o[0] == "recent" && cat.Type == store.CategoryDirect)
+				if m.Item(o[1]).Checked(current).Chosen() {
+					a.PatchCategory(s, cat, map[string]any{"sorting": o[0]})
+				}
+			}
+		})
+		label := "Mute Category"
+		if cat.Muted {
+			label = "Unmute Category"
+		}
+		if m.Item(label).Chosen() {
+			a.PatchCategory(s, cat, map[string]any{"muted": !cat.Muted})
 		}
 		m.Separator()
 	}
@@ -270,6 +328,20 @@ func (v *View) dialogs(c *ui.Context) {
 			v.membersDialog(c, s, d)
 		case *integrations:
 			v.integrationsDialog(c, s, d)
+		case *settingsDialog:
+			v.settingsDialog(c, s, d)
+		case *channelNotifyDialog:
+			v.channelNotifyDialog(c, s, d)
+		case *forwardDialog:
+			v.forwardDialog(c, s, d)
+		case *historyDialog:
+			v.historyDialog(c, s, d)
+		case *peopleDialog:
+			v.peopleDialog(c, s, d)
+		case *inviteDialog:
+			v.inviteDialog(c, s, d)
+		case *previewDialog:
+			v.previewDialog(c, s, d)
 		case *customStatusDialog:
 			v.customStatusDialog(c, s, d)
 		case *profileDialog:
@@ -390,7 +462,22 @@ func (v *View) browseDialog(c *ui.Context, s *app.Server, d *browseDialog) {
 			}
 		})
 		ui.SearchField(c.Key("q"), &d.query).Placeholder("Search channels").AutoFocus()
+		kind := 0
+		if d.archived {
+			kind = 1
+		}
+		ui.Segmented(c.Key("kind"), &kind, "Public channels", "Archived channels")
+		if d.archived = kind == 1; d.archived && !d.archivedLoaded {
+			d.archivedLoaded = true
+			team := s.Team
+			app.Call(v.App, s, func(ctx context.Context, c *mm.Client) ([]store.Channel, error) { return c.ArchivedChannels(ctx, team) },
+				func(chs []store.Channel) { d.archivedList = chs })
+		}
 		ui.Column(c).Height(360).Children(func() {
+			if d.archived {
+				v.archivedList(c, s, d)
+				return
+			}
 			if !d.loaded {
 				ui.Column(c).Grow(1).Center().Children(func() { ui.Spinner(c) })
 				return
@@ -426,6 +513,35 @@ func (v *View) browseDialog(c *ui.Context, s *app.Server, d *browseDialog) {
 				}
 			})
 		})
+	})
+}
+
+func (v *View) archivedList(c *ui.Context, s *app.Server, d *browseDialog) {
+	t := c.Theme()
+	q := strings.ToLower(strings.TrimSpace(d.query))
+	ui.Scroll(c).Grow(1).Children(func() {
+		shown := 0
+		for _, ch := range d.archivedList {
+			if q != "" && !strings.Contains(strings.ToLower(ch.DisplayName), q) && !strings.Contains(ch.Name, q) {
+				continue
+			}
+			shown++
+			ui.Row(c.Key(ch.ID)).Padding(8, 4).Gap(10).AlignItems(ui.Center).BorderWidth(0, 0, 1, 0).BorderColor(t.Border).Children(func() {
+				symbol(c, "archivebox", 14, t.TextMuted)
+				ui.Text(c, ch.DisplayName).FontWeight(600).MaxLines(1).Grow(1)
+				if ui.Button(c, "View").Label("View " + ch.DisplayName).Clicked() {
+					v.dialog = nil
+					v.App.OpenArchived(s, ch)
+				}
+				if ui.Button(c, "Unarchive").Label("Unarchive " + ch.DisplayName).Clicked() {
+					v.dialog = nil
+					v.App.RestoreChannel(s, ch.ID)
+				}
+			})
+		}
+		if shown == 0 {
+			ui.Text(c, "No archived channels").TextColor(t.TextMuted).Padding(8)
+		}
 	})
 }
 
@@ -581,6 +697,22 @@ func (v *View) membersDialog(c *ui.Context, s *app.Server, d *membersDialog) {
 						})
 						if m.Admin {
 							ui.Text(c, "Admin").FontSize(12).TextColor(t.TextMuted)
+						}
+						if m.User != s.Store.Me && ch.Type != store.Direct && ch.Type != store.Group {
+							label := "Make Admin"
+							if m.Admin {
+								label = "Remove Admin"
+							}
+							if ui.Button(c, label).Label(label + " " + a.UserName(s, m.User)).Clicked() {
+								user, admin := m.User, !m.Admin
+								a.SetChannelAdmin(s, d.channel, user, admin, func() {
+									for i := range d.members {
+										if d.members[i].User == user {
+											d.members[i].Admin = admin
+										}
+									}
+								})
+							}
 						}
 						if m.User != s.Store.Me && ch.Name != "town-square" {
 							if ui.Button(c, "Remove").Label("Remove " + a.UserName(s, m.User)).Clicked() {

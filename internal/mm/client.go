@@ -214,6 +214,9 @@ func (c *Client) Load(ctx context.Context) (store.Loaded, error) {
 		return ev, err
 	}
 	ev.Me = me
+	if ev.Prefs, err = c.Preferences(ctx); err != nil {
+		return ev, err
+	}
 	var teams []wireTeam
 	if err := c.do(ctx, "GET", "/users/me/teams", nil, nil, &teams); err != nil {
 		return ev, err

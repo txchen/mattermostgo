@@ -37,9 +37,11 @@ type User struct {
 	// DesktopNotify is the user's own notification setting ("all",
 	// "mention", "none"); the server sends it for the current user only.
 	DesktopNotify string
+	DesktopSound  string
 	Position      string
 	// Email is empty when the server hides it.
 	Email        string
+	MFAActive    bool
 	CustomStatus *CustomStatus
 }
 
@@ -168,6 +170,7 @@ type Post struct {
 	ReplyCount   int64
 	LastReplyAt  int64
 	Participants []UserID
+	Pinned       bool
 	// PendingID is the client's ID of a post it sent, echoed by the server.
 	PendingID string
 	State     PostState
@@ -254,3 +257,19 @@ type ConnOffline struct {
 func (ConnConnecting) isConn() {}
 func (ConnOnline) isConn()     {}
 func (ConnOffline) isConn()    {}
+
+// Preference is one of the user's settings the server keeps.
+type Preference struct {
+	Category, Name, Value string
+}
+
+// ThreadState is how the user follows a thread, for the Threads view.
+type ThreadState struct {
+	Root                          PostID
+	Team                          TeamID
+	ReplyCount, LastReplyAt       int64
+	LastViewedAt                  int64
+	UnreadReplies, UnreadMentions int64
+	Participants                  []UserID
+	Following                     bool
+}

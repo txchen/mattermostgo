@@ -32,6 +32,8 @@ type File struct {
 	Current ServerID `json:"current,omitempty"`
 	// Last remembers the last team and channel per server.
 	Last map[ServerID]Place `json:"last,omitempty"`
+	// Theme names the look chosen in Settings; empty follows the system.
+	Theme string `json:"theme,omitempty"`
 }
 
 type Place struct {

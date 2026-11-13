@@ -27,7 +27,12 @@ type Store struct {
 	Timelines  map[ChannelID]*Timeline
 	Threads    map[PostID]*Timeline
 	Typing     map[ChannelID]map[UserID]time.Time
-	Conn       Conn
+	// Prefs are the user's preferences on the server, by category and
+	// name, as flagged_post for saved posts.
+	Prefs map[string]map[string]string
+	// Followed are the threads the user follows, for the Threads view.
+	Followed map[PostID]*ThreadState
+	Conn     Conn
 	// recent lists the channels with a timeline, most recently loaded first.
 	recent []ChannelID
 }
@@ -44,6 +49,8 @@ func New() *Store {
 		Timelines:  map[ChannelID]*Timeline{},
 		Threads:    map[PostID]*Timeline{},
 		Typing:     map[ChannelID]map[UserID]time.Time{},
+		Prefs:      map[string]map[string]string{},
+		Followed:   map[PostID]*ThreadState{},
 		Conn:       ConnConnecting{},
 	}
 }
@@ -156,6 +163,53 @@ func (s *Store) Apply(ev Event) {
 		}
 	case ConnChanged:
 		s.Conn = ev.Conn
+	case PostsSeen:
+		for _, p := range ev.Posts {
+			if s.Posts[p.ID] == nil {
+				p := p
+				s.Posts[p.ID] = &p
+			}
+		}
+	case PrefsChanged:
+		for _, p := range ev.Prefs {
+			cat := s.Prefs[p.Category]
+			if cat == nil {
+				cat = map[string]string{}
+				s.Prefs[p.Category] = cat
+			}
+			if ev.Deleted {
+				delete(cat, p.Name)
+			} else {
+				cat[p.Name] = p.Value
+			}
+		}
+	case ThreadsLoaded:
+		for id, t := range s.Followed {
+			if t.Team == ev.Team || t.Team == "" {
+				delete(s.Followed, id)
+			}
+		}
+		for _, p := range ev.Posts {
+			if s.Posts[p.ID] == nil {
+				p := p
+				s.Posts[p.ID] = &p
+			}
+		}
+		for _, t := range ev.Threads {
+			t := t
+			s.Followed[t.Root] = &t
+		}
+	case ThreadChanged:
+		if !ev.Thread.Following {
+			delete(s.Followed, ev.Thread.Root)
+			break
+		}
+		t := ev.Thread
+		s.Followed[t.Root] = &t
+	case ThreadRead:
+		if t := s.Followed[ev.Root]; t != nil {
+			t.LastViewedAt, t.UnreadReplies, t.UnreadMentions = ev.LastViewedAt, ev.UnreadReplies, ev.UnreadMentions
+		}
 	case ChannelStats:
 		if ch := s.Channels[ev.Channel]; ch != nil {
 			ch.MemberCount = ev.Members
@@ -176,6 +230,10 @@ func (s *Store) loaded(ev Loaded) {
 	s.Channels = map[ChannelID]*Channel{}
 	for _, ch := range ev.Channels {
 		s.Channels[ch.ID] = &ch
+	}
+	if ev.Prefs != nil {
+		s.Prefs = map[string]map[string]string{}
+		s.Apply(PrefsChanged{Prefs: ev.Prefs})
 	}
 	s.Members = map[ChannelID]*ChannelMember{}
 	for _, m := range ev.Members {
@@ -429,4 +487,37 @@ func (s *Store) Typers(id ChannelID, now time.Time) (users []UserID, next time.T
 	}
 	slices.Sort(users)
 	return users, next
+}
+
+// Pref returns a preference of the user, or "" when unset.
+func (s *Store) Pref(category, name string) string { return s.Prefs[category][name] }
+
+// Saved reports whether the user saved a post.
+func (s *Store) Saved(id PostID) bool { return s.Pref("flagged_post", string(id)) == "true" }
+
+// Hidden reports whether the user closed a DM or GM, which the sidebar
+// then leaves out until a new post comes.
+func (s *Store) Hidden(ch *Channel) bool {
+	switch ch.Type {
+	case Direct:
+		return s.Pref("direct_channel_show", string(ch.DMPartner(s.Me))) == "false"
+	case Group:
+		return s.Pref("group_channel_show", string(ch.ID)) == "false"
+	}
+	return false
+}
+
+// UnreadThreads counts the followed threads of a team with unread
+// replies, and the mentions in them.
+func (s *Store) UnreadThreads(team TeamID) (threads, mentions int64) {
+	for _, t := range s.Followed {
+		if t.Team != team {
+			continue
+		}
+		if t.UnreadReplies > 0 {
+			threads++
+		}
+		mentions += t.UnreadMentions
+	}
+	return threads, mentions
 }

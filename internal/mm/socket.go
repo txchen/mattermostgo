@@ -9,6 +9,7 @@ import (
 	"net/http"
 	"os"
 	"slices"
+	"strconv"
 	"sync"
 	"time"
 
@@ -60,6 +61,7 @@ const (
 	fetchNone fetchKind = iota
 	fetchChannel
 	fetchCategories
+	fetchThreads
 	fetchAll
 )
 
@@ -126,6 +128,30 @@ func decodeEvent(raw []byte, me store.UserID, now time.Time) ([]store.Event, fet
 			return need(fetch{kind: fetchChannel, channel: channel})
 		}
 		return need(fetch{kind: fetchChannel, channel: store.ChannelID(w.ID)})
+	case "preferences_changed", "preferences_deleted":
+		var ws []wirePref
+		if err := m.decode("preferences", &ws); err != nil {
+			return nil, fetch{}, err
+		}
+		ev := store.PrefsChanged{Deleted: m.Event == "preferences_deleted"}
+		for _, w := range ws {
+			ev.Prefs = append(ev.Prefs, w.pref())
+		}
+		return one(ev)
+	case "thread_updated":
+		var w wireThread
+		if err := m.decode("thread", &w); err != nil {
+			return nil, fetch{}, err
+		}
+		return one(store.ThreadChanged{Thread: w.state(store.TeamID(m.Broadcast.TeamID))})
+	case "thread_follow_changed":
+		if m.str("state") == "false" {
+			return one(store.ThreadChanged{Thread: store.ThreadState{Root: store.PostID(m.str("thread_id"))}})
+		}
+		return need(fetch{kind: fetchThreads, team: store.TeamID(m.Broadcast.TeamID)})
+	case "thread_read_changed":
+		num := func(k string) int64 { n, _ := strconv.ParseInt(m.str(k), 10, 64); return n }
+		return one(store.ThreadRead{Root: store.PostID(m.str("thread_id")), LastViewedAt: num("timestamp"), UnreadReplies: num("unread_replies"), UnreadMentions: num("unread_mentions")})
 	case "post_unread", "channel_converted":
 		id := store.ChannelID(m.str("channel_id"))
 		if id == "" {
@@ -359,6 +385,13 @@ func (s *Socket) fetch(ctx context.Context, f fetch) {
 	case fetchCategories:
 		if cats, err := s.Client.Categories(ctx, f.team); err == nil {
 			s.Emit(store.CategoriesLoaded{Team: f.team, Categories: cats})
+		}
+	case fetchThreads:
+		if f.team == "" || s.Me == "" {
+			return
+		}
+		if ev, err := s.Client.Threads(ctx, s.Me, f.team); err == nil {
+			s.Emit(ev)
 		}
 	case fetchAll:
 		if s.Online != nil {

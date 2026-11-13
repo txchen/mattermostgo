@@ -36,9 +36,38 @@ Each item is checked by a test the reviewer can rerun: view tests with
    and message attachments as webhooks and bots send them (color bar,
    pretext, author, title, text, fields, image, footer).
 
+## Round 3 (0.3.0)
+
+Checked by `go test ./internal/view` (round3_test.go) and, against the dev
+server, `TestParity2API` and `TestRound3UI` in `internal/e2e`.
+
+1. Search from the top bar, with files; Recent Mentions and Saved
+   messages; pinned messages of a channel. Results show in the RHS.
+2. Threads: the followed threads of the team, their unread replies and
+   mentions, follow and unfollow, mark read.
+3. Post menu: Forward, Follow Thread, Mark as Unread, Remind, Save, Pin,
+   Edit History. Pinned and Saved show above a post.
+4. Profile popover on a post's avatar and name, with Message.
+5. Emoji picker with categories, recent emoji, skin tones and custom
+   emoji; custom emoji in reactions.
+6. Slash commands complete in the composer and run on the server.
+7. File preview: images and text or code in the window, other files in
+   Quick Look.
+8. Group messages, closing a DM or GM, a DM dialog with recent people.
+9. Open a channel or a thread in a window of its own.
+10. Settings: notifications (desktop, threads, sound, channel-wide
+    mentions, first name, keywords), display (own themes, soft dark
+    ones; clock; name format; compact; link previews; click to open
+    threads), sidebar (unreads first, DM limit), security (username,
+    email, password, MFA, sessions, personal access tokens), profile
+    picture. Notification preferences of a channel.
+11. Sidebar: drag channels and categories, sort and mute a category,
+    collapse synced with the server, Add Channels, Invite Members.
+12. Channels: channel admins, archived channels to view or unarchive,
+    private to public, an Info panel with About, Members, Files and
+    bookmarks (bookmarks need an Enterprise license on the server).
+
 ## Out of scope
 
-Interactive buttons and menus in attachments, closing DMs from the
-sidebar (needs the `direct_channel_show` preferences, which the client
-does not read yet), channel roles (making a member a channel admin),
-and the Threads view.
+Interactive buttons and menus in attachments, interactive dialogs,
+custom emoji upload, push and email notification settings.

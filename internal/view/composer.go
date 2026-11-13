@@ -56,6 +56,8 @@ type attachment struct {
 type Hooks struct {
 	PickFiles      func(done func(paths []string))
 	ClipboardImage func() []byte
+	// OpenWindow opens a window of its own showing build.
+	OpenWindow func(title string, build func(c *ui.Context))
 }
 
 func (v *View) composer(c *ui.Context, s *app.Server, ch store.ChannelID, root store.PostID) {
@@ -408,6 +410,24 @@ func (v *View) updateSuggestions(s *app.Server, sug *suggestions, text string, c
 	sug.word, sug.items, sug.sel, sug.start, sug.end, sug.stale = word, nil, sel, start, caret, false
 	if word != sug.dismissed {
 		sug.dismissed = "" // Escape dismisses one word, not the next
+	}
+	if start == 0 && strings.HasPrefix(word, "/") && word != sug.dismissed {
+		// A slash command, as the first word of the message.
+		prefix := strings.ToLower(word[1:])
+		for _, cmd := range v.App.Commands(s) {
+			if strings.HasPrefix(cmd.Trigger, prefix) {
+				detail := strings.TrimSpace(cmd.Hint + "  " + cmd.Description)
+				sug.items = append(sug.items, suggestion{label: "/" + cmd.Trigger, detail: detail, insert: "/" + cmd.Trigger + " "})
+			}
+		}
+		slices.SortFunc(sug.items, func(a, b suggestion) int { return strings.Compare(a.label, b.label) })
+		sug.items = sug.items[:min(8, len(sug.items))]
+		sug.sel = min(sug.sel, max(len(sug.items)-1, 0))
+		if len(sug.items) == 0 {
+			// The commands load the first time; ask again as they come.
+			sug.stale = true
+		}
+		return
 	}
 	if len(word) < 2 || word == sug.dismissed {
 		return

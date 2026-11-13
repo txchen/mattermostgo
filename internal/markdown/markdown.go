@@ -23,6 +23,27 @@ func Emoji(name string) (string, bool) {
 	return e, ok
 }
 
+// EmojiCategory is a group of the emoji picker, its emoji in order.
+type EmojiCategory struct {
+	Name   string
+	Emojis []string
+}
+
+// EmojiCategories returns the groups of the picker, as the webapp orders them.
+func EmojiCategories() []EmojiCategory { return emojiCategories }
+
+// SkinTones are the suffixes of the skin tone variants, lightest first.
+var SkinTones = []string{"_light_skin_tone", "_medium_light_skin_tone", "_medium_skin_tone", "_medium_dark_skin_tone", "_dark_skin_tone"}
+
+// WithSkinTone returns the variant of an emoji in a tone (1 to 5), or the
+// emoji itself when it has none or tone is 0.
+func WithSkinTone(name string, tone int) string {
+	if tone < 1 || tone > len(SkinTones) || !skinToned[name] {
+		return name
+	}
+	return name + SkinTones[tone-1]
+}
+
 // EmojiNames returns the names starting with prefix, sorted, at most n.
 func EmojiNames(prefix string, n int) []string {
 	var out []string

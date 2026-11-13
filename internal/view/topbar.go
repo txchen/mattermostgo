@@ -61,26 +61,43 @@ func (v *View) topBar(c *ui.Context) {
 			if _, in := s.Session.(app.LoggedIn); !in || !s.Ready {
 				return
 			}
-			find := ui.ButtonBase(c).Width(480).MaxWidth(480).Height(28).Padding(0, 10).Radius(4).Label("Find channels and people")
-			bg := ui.RGBA(255, 255, 255, 0.08)
-			if find.Hovered() {
-				bg = ui.RGBA(255, 255, 255, 0.16)
+			// The box takes the colors of the bar it sits on.
+			bt := *ui.DarkTheme()
+			bt.Text, bt.TextMuted, bt.Background = p.sidebarTextStrong, p.sidebarText, ui.Transparent
+			if activeLook.lightChrome {
+				bt = *ui.LightTheme()
 			}
-			find.Background(bg).Children(func() {
-				ui.Row(c).FillWidth().Gap(8).AlignItems(ui.Center).Children(func() {
+			ui.Themed(c, &bt).Background(ui.Transparent).Children(func() {
+				ui.Row(c).Width(480).MaxWidth(480).Height(28).Padding(0, 4, 0, 10).Gap(6).Radius(4).Background(ui.RGBA(255, 255, 255, 0.08)).AlignItems(ui.Center).Children(func() {
 					symbol(c, "magnifyingglass", 13, p.sidebarText)
-					ui.Text(c, "Find channels and people").FontSize(13).TextColor(p.sidebarText).Grow(1)
-					ui.Text(c, "⌘K").FontSize(12).TextColor(p.offline)
+					in := ui.TextInput(c.Key("search"), &v.query).Placeholder("Search").Label("Search").
+						Grow(1).Height(26).FontSize(13).Background(ui.Transparent).BorderWidth(0).TextColor(p.sidebarTextStrong)
+					if v.searchFocus {
+						v.searchFocus = false
+						in.Focus()
+					}
+					if in.Submitted() {
+						v.search(s, v.query)
+					}
+					if v.query != "" && iconButton(c, "xmark.circle.fill", "Clear search", 11, p.sidebarText, p.sidebarHover).Clicked() {
+						v.query = ""
+					}
 				})
 			})
-			if find.Clicked() {
-				v.switcher = switcher{open: true}
-			}
 		})
 		ui.Row(c).Width(260).Gap(8).Justify(ui.End).AlignItems(ui.Center).Children(func() {
 			if _, in := s.Session.(app.LoggedIn); in {
 				v.connState(c, s, p)
 				if s.Ready {
+					if iconButton(c, "at", "Recent mentions", 14, p.sidebarText, p.sidebarHover).Clicked() {
+						v.openMentions(s)
+					}
+					if iconButton(c, "bookmark", "Saved messages", 14, p.sidebarText, p.sidebarHover).Clicked() {
+						v.openSaved(s)
+					}
+					if iconButton(c, "gearshape", "Settings", 14, p.sidebarText, p.sidebarHover).Clicked() {
+						v.openSettings(s, 0)
+					}
 					v.meButton(c, s)
 				}
 			}

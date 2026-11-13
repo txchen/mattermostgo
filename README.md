@@ -17,7 +17,9 @@ Status: first working version. You can add servers, log in with a
 password and MFA, read and write in channels, DMs and threads, and get
 posts, reactions, typing and read state in real time, manage channels,
 sidebar categories and members, and make webhooks, slash commands and bot
-accounts. Link previews and message attachments show as in the webapp. Everything is
+accounts. Link previews and message attachments show as in the webapp.
+Search, saved and pinned posts, the Threads view, settings with soft dark
+themes, and pop-out windows came in 0.3.0. Everything is
 checked against a real Mattermost server. Signing, the icon and
 notification checks are still open; see [the issues](.scratch/desktop-v1/issues/).
 

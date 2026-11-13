@@ -49,7 +49,19 @@ type View struct {
 	rhsSize             float32
 	dialog              dialog
 	press               textPress
-	textClick           textClick
+	// panel is the RHS panel of panelServer, and profileKey the post
+	// part whose profile popover is open.
+	panel       panel
+	panelServer *app.Server
+	profileKey  string
+	// query is the search box of the top bar; searchFocus gives it the
+	// keyboard focus in the next frame.
+	query       string
+	searchFocus bool
+	// window prefixes the list states of a window other than the main
+	// one while it builds, so that each window scrolls on its own.
+	window    string
+	textClick textClick
 	// serverMenu and plusMenu are the popovers of the server button and
 	// the sidebar's + button.
 	serverMenu, plusMenu bool
@@ -77,7 +89,7 @@ func New(a *app.App, m *media.Cache) *View {
 func (v *View) ShowError(msg string) { v.toasts = append(v.toasts, msg) }
 
 func (v *View) list(s *app.Server, id string) *ui.ListState {
-	k := listKey{s.Config.ID, id}
+	k := listKey{s.Config.ID, v.window + id}
 	l := v.lists[k]
 	if l == nil {
 		l = &ui.ListState{}
@@ -94,31 +106,11 @@ type palette struct {
 	cardBorder, link, buttonBg                                                            ui.Color
 }
 
-func colors(c *ui.Context) palette {
-	if c.Theme().Dark {
-		return palette{
-			topBar: ui.Hex("#191b1f"), teamBar: ui.Hex("#191b1f"), sidebar: ui.Hex("#202228"),
-			sidebarText: ui.RGBA(221, 223, 228, 0.64), sidebarTextStrong: ui.Hex("#dddfe4"),
-			sidebarHover: ui.RGBA(255, 255, 255, 0.08), sidebarActive: ui.RGBA(74, 124, 232, 0.24),
-			mentionBg: ui.Hex("#4a7ce8"), mentionText: ui.Hex("#ffffff"), newLine: ui.Hex("#de5e5e"),
-			online: ui.Hex("#3db887"), away: ui.Hex("#ffbc1f"), dnd: ui.Hex("#d24b4e"), offline: ui.RGBA(221, 223, 228, 0.32),
-			mentionHighlight: ui.RGBA(74, 124, 232, 0.16),
-			cardBorder:       ui.RGBA(221, 223, 228, 0.12), link: ui.Hex("#5d89ea"), buttonBg: ui.Hex("#4a7ce8"),
-		}
-	}
-	return palette{
-		topBar: ui.Hex("#14213e"), teamBar: ui.Hex("#14213e"), sidebar: ui.Hex("#1e325c"),
-		sidebarText: ui.RGBA(255, 255, 255, 0.64), sidebarTextStrong: ui.Hex("#ffffff"),
-		sidebarHover: ui.RGBA(255, 255, 255, 0.08), sidebarActive: ui.RGBA(255, 255, 255, 0.16),
-		mentionBg: ui.Hex("#ffffff"), mentionText: ui.Hex("#1e325c"), newLine: ui.Hex("#cc8f00"),
-		online: ui.Hex("#3db887"), away: ui.Hex("#ffbc1f"), dnd: ui.Hex("#d24b4e"), offline: ui.RGBA(255, 255, 255, 0.32),
-		mentionHighlight: ui.RGBA(255, 188, 31, 0.16),
-		cardBorder:       ui.RGBA(63, 67, 80, 0.16), link: ui.Hex("#386fe5"), buttonBg: ui.Hex("#1c58d9"),
-	}
-}
+func colors(c *ui.Context) palette { return activeLook.pal }
 
 // Build is the window's view.
 func (v *View) Build(c *ui.Context) {
+	v.setTheme(c)
 	for _, msg := range v.toasts {
 		c.Toast(msg)
 	}
@@ -330,10 +322,17 @@ func (v *View) main(c *ui.Context, s *app.Server) {
 		// The channel and the RHS sit on a card inset in the sidebar's
 		// color, as the webapp draws them.
 		ui.Row(c).Grow(1).FillHeight().Margin(0, 4, 4, 0).Radius(8).Clip().Background(t.Background).BorderWidth(1).BorderColor(p.cardBorder).Children(func() {
-			if s.Thread != "" {
-				ui.SplitPercent(c, &v.rhsSize, func() { v.channel(c, s) }, func() { v.thread(c, s) }).Grow(1).FillHeight().SplitReset(62)
+			center := func() {
+				if s.ThreadsView {
+					v.threadsView(c, s)
+				} else {
+					v.channel(c, s)
+				}
+			}
+			if s.Thread != "" || v.currentPanel(s) != nil {
+				ui.SplitPercent(c, &v.rhsSize, center, func() { v.rhs(c, s) }).Grow(1).FillHeight().SplitReset(62)
 			} else {
-				v.channel(c, s)
+				center()
 			}
 		})
 	})
@@ -356,8 +355,19 @@ func (v *View) shortcuts(c *ui.Context, s *app.Server) {
 	if c.Shortcut(ui.Alt, ui.KeyDown) {
 		v.moveChannel(s, 1)
 	}
-	if c.Shortcut(0, ui.KeyEscape) && s.Thread != "" {
-		a.CloseThread(s)
+	if c.Shortcut(0, ui.KeyEscape) {
+		switch {
+		case s.Thread != "":
+			a.CloseThread(s)
+		case v.currentPanel(s) != nil:
+			v.closePanel()
+		}
+	}
+	if c.Shortcut(ui.Cmd|ui.Shift, ui.KeyF) {
+		v.searchFocus = true
+	}
+	if c.Shortcut(ui.Cmd|ui.Shift, ui.KeyM) {
+		v.openMentions(s)
 	}
 }
 

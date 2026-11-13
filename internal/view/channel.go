@@ -37,6 +37,16 @@ func (v *View) channel(c *ui.Context, s *app.Server) {
 		v.channelHeader(c, s, ch)
 		ui.Column(c.Key(ch.ID)).Grow(1).Children(func() {
 			v.postList(c, s, ch.ID, "")
+			if ch.Deleted {
+				ui.Row(c).Margin(0, 20, 16, 20).Padding(14).Radius(8).Background(t.Surface).Gap(8).AlignItems(ui.Center).Children(func() {
+					symbol(c, "archivebox", 14, t.TextMuted)
+					ui.Text(c, "You are viewing an archived channel. No one can post in it.").TextColor(t.TextMuted).Grow(1)
+					if ui.Button(c, "Unarchive").Clicked() {
+						v.App.RestoreChannel(s, ch.ID)
+					}
+				})
+				return
+			}
 			v.composer(c, s, ch.ID, "")
 		})
 	})
@@ -91,6 +101,12 @@ func (v *View) channelHeader(c *ui.Context, s *app.Server, ch *store.Channel) {
 			ui.Text(c, about).TextColor(t.TextMuted).FontSize(13).MaxLines(1).Grow(1).Shrink(1).Tooltip(about)
 		} else {
 			ui.Spacer(c)
+		}
+		if iconButton(c, "pin", "Pinned messages", 14, t.TextMuted, t.SurfaceHover).Clicked() {
+			v.openPinned(s, ch.ID)
+		}
+		if iconButton(c, "info.circle", "Channel info", 14, t.TextMuted, t.SurfaceHover).Clicked() {
+			v.openInfo(s, ch.ID, 0)
 		}
 		if iconButton(c, "link", "Copy channel link", 14, t.TextMuted, t.SurfaceHover).Clicked() {
 			if team := s.Store.Teams[s.Team]; team != nil {
@@ -243,10 +259,11 @@ func (v *View) postRow(row ui.ListRow, s *app.Server, order []store.PostID, i in
 	case hovered:
 		bg = t.SurfaceHover
 	}
-	box := ui.Box(c).FillWidth().Background(bg).ContextMenu(func(m *ui.Menu) { v.postMenu(m, c, s, post) })
+	box := ui.Box(c).FillWidth().Background(bg).ContextMenu(func(m *ui.Menu) { v.postMenu(m, c, s, post, true) })
 	// A click on a post opens its thread, as the webapp's "Click to open
 	// threads"; what the post holds that is clickable keeps its click.
-	opens := !inThread && !post.IsSystem() && post.State == store.Sent && v.editing != post.ID
+	opens := !inThread && !post.IsSystem() && post.State == store.Sent && v.editing != post.ID && s.Store.Pref("display_settings", "click_to_reply") != "false"
+	compact := s.Store.Pref("display_settings", "message_display") == "compact"
 	if opens {
 		if box.Label("Post by " + v.App.UserName(s, post.UserID)).RowClicked() {
 			v.App.OpenThread(s, post.ID)
@@ -254,20 +271,27 @@ func (v *View) postRow(row ui.ListRow, s *app.Server, order []store.PostID, i in
 	}
 	box.Children(func() {
 		top := float32(10)
-		if grouped {
+		if grouped || compact {
 			top = 2
+		}
+		if post.Pinned || s.Store.Saved(post.ID) {
+			v.postMarks(c, s, post)
 		}
 		ui.Row(c).Padding(top, 20, 4, 20).Gap(12).AlignItems(ui.Start).Children(func() {
 			ui.Column(c).Width(36).AlignItems(ui.Center).Children(func() {
+				if compact {
+					if !grouped || hovered {
+						ui.Text(c, v.clock(time.UnixMilli(post.CreateAt))).FontSize(11).TextColor(t.TextMuted).Padding(3, 0)
+					}
+					return
+				}
 				switch {
 				case !grouped && post.IsSystem():
 					ui.Image(c, systemAvatar).Size(36, 36).AccessHidden(true)
-				case !grouped && post.Props.OverrideIconURL != "":
-					v.webImage(c, s, store.Image{URL: post.Props.OverrideIconURL}, 36, 36).Radius(18)
 				case !grouped:
-					v.avatar(c, s, post.UserID, 36)
+					v.userButton(c, s, post, 36)
 				case hovered:
-					ui.Text(c, time.UnixMilli(post.CreateAt).Format("15:04")).FontSize(10).TextColor(t.TextMuted).Padding(4, 0)
+					ui.Text(c, v.clock(time.UnixMilli(post.CreateAt))).FontSize(10).TextColor(t.TextMuted).Padding(4, 0)
 				}
 			})
 			ui.Column(c).Grow(1).Shrink(1).Gap(3).Children(func() {
@@ -410,7 +434,11 @@ func (v *View) postHeader(c *ui.Context, s *app.Server, post *store.Post) {
 		case post.Props.OverrideUsername != "":
 			name = post.Props.OverrideUsername
 		}
-		ui.Text(c, name).FontWeight(700).FontSize(15)
+		if post.IsSystem() || post.Props.OverrideUsername != "" {
+			ui.Text(c, name).FontWeight(700).FontSize(15)
+		} else {
+			v.userName(c, s, post, name)
+		}
 		if u := s.Store.Users[post.UserID]; u != nil && !post.IsSystem() && post.Props.OverrideUsername == "" && u.CustomStatus.Shows(c.Now()) {
 			ui.Text(c, emojiText(u.CustomStatus.Emoji)).FontSize(14).Tooltip(u.CustomStatus.Text)
 		}
@@ -418,7 +446,7 @@ func (v *View) postHeader(c *ui.Context, s *app.Server, post *store.Post) {
 			ui.Text(c, "BOT").FontSize(10).FontWeight(700).Padding(1, 4).Radius(3).Background(t.Surface).TextColor(t.TextMuted)
 		}
 		ts := time.UnixMilli(post.CreateAt)
-		ui.Text(c, ts.Format("15:04")).FontSize(12).TextColor(t.TextMuted).Tooltip(ts.Format("Monday, January 2, 2006 at 15:04"))
+		ui.Text(c, v.clock(ts)).FontSize(12).TextColor(t.TextMuted).Tooltip(ts.Format("Monday, January 2, 2006 at ") + v.clock(ts))
 	})
 }
 
@@ -454,17 +482,20 @@ func (v *View) postBody(c *ui.Context, s *app.Server, post *store.Post, opens st
 			ui.Text(c, post.Message).FontSize(14).TextColor(t.TextMuted).Selectable()
 		case msg == "":
 		case plainText(msg):
-			v.opensThread(ui.Text(c, msg).FontSize(15).LineHeight(1.4).Selectable(), s, opens)
+			v.opensThread(ui.Text(c, msg).FontSize(15).LineHeight(1.4).Selectable().ContextMenu(v.textMenu(c, s, post)), s, opens)
 		default:
-			v.opensThread(mdview.View(c, msg, v.markdownOptions(s)), s, opens)
+			v.opensThread(mdview.View(c, msg, v.markdownOptions(s)).ContextMenu(v.textMenu(c, s, post)), s, opens)
 		}
 		if post.EditAt > 0 {
-			ui.Text(c, "Edited").FontSize(11).TextColor(t.TextMuted).Tooltip(time.UnixMilli(post.EditAt).Format("Edited Monday, January 2 at 15:04"))
+			edited := ui.Text(c, "Edited").FontSize(11).TextColor(t.TextMuted).Tooltip(time.UnixMilli(post.EditAt).Format("Edited Monday, January 2 at ") + v.clock(time.UnixMilli(post.EditAt)) + ". Click for the history.")
+			if edited.Clicked() {
+				v.openEditHistory(s, post)
+			}
 		}
 		for i, a := range post.Attachments {
 			ui.Column(c.Key(i)).Children(func() { v.attachment(c, s, a, opens) })
 		}
-		if post.Embed != nil {
+		if post.Embed != nil && s.Store.Pref("display_settings", "link_previews") != "false" {
 			v.embed(c, s, post.Embed, opens)
 		}
 		if len(post.Files) > 0 {
@@ -575,14 +606,14 @@ func (v *View) files(c *ui.Context, s *app.Server, post *store.Post) {
 						}
 					})
 					if img.Clicked() {
-						v.App.Download(s, f)
+						v.preview(s, post.Files, fileIndex(post.Files, f.ID))
 					}
 					return
 				}
 				card := ui.ButtonBase(c).Padding(8, 12).Radius(6).BorderWidth(1).BorderColor(t.Border).Label(f.Name)
 				card.Children(func() {
 					ui.Row(c).Gap(10).AlignItems(ui.Center).Children(func() {
-						ui.Text(c, "📄").FontSize(20)
+						ui.Text(c, fileGlyph(f)).FontSize(20)
 						ui.Column(c).Children(func() {
 							ui.Text(c, f.Name).FontSize(13).Bold().MaxLines(1).MaxWidth(240)
 							ui.Text(c, strings.ToUpper(f.Extension)+" "+size(f.Size)).FontSize(11).TextColor(t.TextMuted)
@@ -590,11 +621,15 @@ func (v *View) files(c *ui.Context, s *app.Server, post *store.Post) {
 					})
 				})
 				if card.Clicked() {
-					v.App.Download(s, f)
+					v.preview(s, post.Files, fileIndex(post.Files, f.ID))
 				}
 			})
 		}
 	})
+}
+
+func fileIndex(files []store.FileInfo, id store.FileID) int {
+	return max(slices.IndexFunc(files, func(f store.FileInfo) bool { return f.ID == id }), 0)
 }
 
 func size(n int64) string {
@@ -650,7 +685,7 @@ func (v *View) reactions(c *ui.Context, s *app.Server, post *store.Post) {
 			}
 			chip.Children(func() {
 				ui.Row(c).Gap(4).AlignItems(ui.Center).Children(func() {
-					ui.Text(c, emojiText(g.name)).FontSize(14)
+					v.emoji(c, s, g.name, 14)
 					txt := ui.Text(c, fmt.Sprint(len(g.users))).FontSize(12).FontWeight(600)
 					if mine {
 						txt.TextColor(p.link)
@@ -681,6 +716,8 @@ type emojiPicker struct {
 	fromToolbar bool
 	// inDialog marks the picker of the custom status dialog.
 	inDialog bool
+	// tab is the category shown: 0 for the recent emoji.
+	tab      int
 	composer draftKey
 	query    string
 	insert   func(name string)
@@ -693,44 +730,6 @@ var commonEmoji = []string{
 	"thinking_face", "sweat_smile", "sob", "scream", "heart_eyes", "sunglasses", "ok_hand", "wave",
 	"muscle", "point_up", "star", "sparkles", "zap", "bulb", "warning", "x",
 	"heavy_check_mark", "question", "exclamation", "coffee", "beers", "cake", "gift", "trophy",
-}
-
-func (v *View) emojiPopover(c *ui.Context, anchor ui.Element, s *app.Server) {
-	open := v.picker.open
-	ui.Popover(c, anchor, &open, func() {
-		t := c.Theme()
-		ui.Column(c).Width(332).Padding(8).Gap(8).Children(func() {
-			ui.SearchField(c.Key("emoji-q"), &v.picker.query).Placeholder("Search emoji").AutoFocus()
-			names := commonEmoji
-			if q := strings.TrimSpace(strings.ToLower(v.picker.query)); q != "" {
-				names = markdown.EmojiNames(q, 40)
-			}
-			if len(names) == 0 {
-				ui.Text(c, "No emoji found").TextColor(t.TextMuted).Padding(8)
-			}
-			ui.Row(c).Wrap().Gap(2).Children(func() {
-				for _, name := range names {
-					b := ui.ButtonBase(c.Key(name)).Size(36, 36).Radius(4).Center().Label(":" + name + ":").Tooltip(":" + name + ":")
-					if b.Hovered() {
-						b.Background(t.SurfaceHover)
-					}
-					b.Children(func() { ui.Text(c, emojiText(name)).FontSize(22) })
-					if b.Clicked() {
-						pick := v.picker
-						v.picker = emojiPicker{}
-						if pick.insert != nil {
-							pick.insert(name)
-						} else {
-							v.App.ToggleReaction(s, pick.post, name)
-						}
-					}
-				}
-			})
-		})
-	})
-	if !open {
-		v.picker = emojiPicker{}
-	}
 }
 
 func (v *View) postActions(c *ui.Context, s *app.Server, post *store.Post, inThread bool) {
@@ -759,76 +758,127 @@ func (v *View) postActions(c *ui.Context, s *app.Server, post *store.Post, inThr
 		if !inThread && iconButton(c, "arrowshape.turn.up.left", "Reply", 15, muted, t.SurfaceHover).Clicked() {
 			v.App.OpenThread(s, post.ID)
 		}
-		more := iconButton(c, "ellipsis", "More actions", 15, muted, t.SurfaceHover)
-		if more.Clicked() {
-			v.moreFor = post.ID
-			v.actionsFor = post.ID
-		}
-		open := v.moreFor == post.ID
-		ui.Popover(c, more, &open, func() {
-			menuPanel(c, 220, func() {
-				for _, it := range v.postItems(s, post) {
-					if it.label == "" {
-						menuDivider(c)
-						continue
-					}
-					if menuRow(c, it.label, it.label, it.detail, it.danger) {
-						v.moreFor, v.actionsFor = "", ""
-						it.do(c)
-					}
-				}
-			})
-		})
-		if !open && v.moreFor == post.ID {
-			v.moreFor = ""
-		}
+		iconButton(c, "ellipsis", "More actions", 15, muted, t.SurfaceHover).Menu(func(m *ui.Menu) { v.postMenu(m, c, s, post, false) })
 	})
-	if !v.picker.open && v.moreFor == "" {
+	if !v.picker.open {
 		v.actionsFor = ""
 	}
 }
 
-// postItem is an action on a post, in the "more" popover and the
-// context menu alike; an empty label is a divider.
-type postItem struct {
-	label, detail string
-	danger        bool
-	do            func(c *ui.Context)
-}
+// remindTimes are the choices of the Remind submenu, as the webapp's.
+var remindTimes = []clearAfter{dndEnds[1], dndEnds[2], dndEnds[3], dndEnds[4]}
 
-func (v *View) postItems(s *app.Server, post *store.Post) []postItem {
-	items := []postItem{
-		{label: "Reply", do: func(*ui.Context) { v.App.OpenThread(s, post.ID) }},
-		{},
-		{label: "Copy Text", do: func(c *ui.Context) { c.WriteClipboard(post.Message) }},
-		{label: "Copy Link", do: func(c *ui.Context) { c.WriteClipboard(v.App.Permalink(s, post.ID)) }},
-	}
-	if post.UserID == s.Store.Me && !post.IsSystem() {
-		items = append(items, postItem{},
-			postItem{label: "Edit", do: func(*ui.Context) { v.editing, v.editText = post.ID, post.Message }},
-			postItem{label: "Delete", danger: true, do: func(*ui.Context) { v.App.DeletePost(s, post.ID) }})
-	}
-	return items
-}
-
-func (v *View) postMenu(m *ui.Menu, c *ui.Context, s *app.Server, post *store.Post) {
+// postMenu builds the actions on a post, for its More button and, with
+// context, its context menu, which adds reactions.
+func (v *View) postMenu(m *ui.Menu, c *ui.Context, s *app.Server, post *store.Post, context bool) {
+	a := v.App
 	if post.State != store.Sent {
 		return
 	}
-	m.Submenu("Add Reaction", func(m *ui.Menu) {
-		for _, e := range QuickReactions {
-			if m.Item(emojiText(e) + "  :" + e + ":").Chosen() {
-				v.App.ToggleReaction(s, post.ID, e)
+	if context {
+		m.Submenu("Add Reaction", func(m *ui.Menu) {
+			for _, e := range QuickReactions {
+				if m.Item(emojiText(e) + "  :" + e + ":").Chosen() {
+					a.ToggleReaction(s, post.ID, e)
+				}
+			}
+		})
+	}
+	root := post.ID
+	if post.RootID != "" {
+		root = post.RootID
+	}
+	if m.Item("Reply").Chosen() {
+		a.OpenThread(s, root)
+	}
+	if m.Item("Forward…").Chosen() {
+		v.dialog = &forwardDialog{post: post.ID}
+	}
+	if !post.IsSystem() {
+		_, following := s.Store.Followed[root]
+		label := "Follow Thread"
+		if following {
+			label = "Unfollow Thread"
+		}
+		if m.Item(label).Chosen() {
+			a.SetFollowing(s, root, !following)
+		}
+	}
+	if m.Item("Mark as Unread").Chosen() {
+		a.MarkPostUnread(s, post)
+	}
+	m.Submenu("Remind", func(m *ui.Menu) {
+		for _, r := range remindTimes {
+			if m.Item(r.label).Chosen() {
+				a.Remind(s, post.ID, r.until(time.Now()))
 			}
 		}
 	})
-	for _, it := range v.postItems(s, post) {
-		if it.label == "" {
-			m.Separator()
-		} else if m.Item(it.label).Chosen() {
-			it.do(c)
+	saved := s.Store.Saved(post.ID)
+	label := "Save"
+	if saved {
+		label = "Remove from Saved"
+	}
+	if m.Item(label).Chosen() {
+		a.SetSaved(s, post.ID, !saved)
+	}
+	label = "Pin to Channel"
+	if post.Pinned {
+		label = "Unpin from Channel"
+	}
+	if m.Item(label).Chosen() {
+		a.SetPinned(s, post.ID, !post.Pinned)
+	}
+	m.Separator()
+	if m.Item("Copy Link").Chosen() {
+		c.WriteClipboard(a.Permalink(s, post.ID))
+		c.Toast("Link copied")
+	}
+	if m.Item("Copy Text").Chosen() {
+		c.WriteClipboard(post.Message)
+	}
+	if post.UserID == s.Store.Me && !post.IsSystem() {
+		m.Separator()
+		if m.Item("Edit").Chosen() {
+			v.editing, v.editText = post.ID, post.Message
+		}
+		if post.EditAt > 0 && m.Item("Edit History").Chosen() {
+			v.openEditHistory(s, post)
+		}
+		if m.Item("Delete").Danger().Chosen() {
+			v.dialog = &confirmDialog{title: "Delete this message?", action: "Delete", body: "Its replies go too, and no one can get it back.",
+				do: func() { a.DeletePost(s, post.ID) }}
 		}
 	}
+}
+
+// textMenu is the context menu of the text of a post: the commands of
+// selected text, then the actions on the post.
+func (v *View) textMenu(c *ui.Context, s *app.Server, post *store.Post) func(m *ui.Menu) {
+	return func(m *ui.Menu) {
+		m.EditItems()
+		m.Separator()
+		v.postMenu(m, c, s, post, true)
+	}
+}
+
+// postMarks says above a post that it is pinned or saved, as the webapp.
+func (v *View) postMarks(c *ui.Context, s *app.Server, post *store.Post) {
+	p := colors(c)
+	ui.Row(c).Padding(6, 20, 0, 68).Gap(12).Children(func() {
+		if post.Pinned {
+			ui.Row(c).Gap(4).AlignItems(ui.Center).Children(func() {
+				symbol(c, "pin.fill", 10, p.link)
+				ui.Text(c, "Pinned").FontSize(11).FontWeight(600).TextColor(p.link)
+			})
+		}
+		if s.Store.Saved(post.ID) {
+			ui.Row(c).Gap(4).AlignItems(ui.Center).Children(func() {
+				symbol(c, "bookmark.fill", 10, p.link)
+				ui.Text(c, "Saved").FontSize(11).FontWeight(600).TextColor(p.link)
+			})
+		}
+	})
 }
 
 func (v *View) editBox(c *ui.Context, s *app.Server, post *store.Post) {
