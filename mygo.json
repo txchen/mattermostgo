@@ -7,7 +7,9 @@
   "license": "Apache-2.0",
   "main": "./cmd/mattermostgo",
   "out": "build",
-  "urlSchemes": ["mattermost"],
+  "urlSchemes": [
+    "mattermost"
+  ],
   "macos": {
     "minimumSystemVersion": "12.0",
     "signingIdentity": "Developer ID Application: ROBOPUNK FOUNDATION (68S3R4UWP6)",
@@ -15,5 +17,20 @@
       "keychainProfile": "robopunk-notary",
       "keychain": "~/Library/Keychains/login.keychain-db"
     }
-  }
+  },
+  "linux": {
+    "maintainer": "Tianxiang Chen <txchendev@gmail.com>",
+    "comment": "Native Mattermost client",
+    "categories": [
+      "Network",
+      "InstantMessaging",
+      "Chat"
+    ],
+    "webview": false,
+    "command": "mattermost-go",
+    "depends": [
+      "libsecret-1-0"
+    ]
+  },
+  "publisher": "Mattermost Go contributors"
 }

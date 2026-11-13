@@ -4,10 +4,11 @@
 
 # Mattermost Go
 
-**A native Mattermost client for macOS. No Electron, no browser engine.**
+**A native Mattermost client for macOS, with builds for Linux and Windows. No Electron, no browser engine.**
 
 [![Release](https://img.shields.io/github/v/release/txchen/mattermostgo)](https://github.com/txchen/mattermostgo/releases/latest)
 ![macOS 12+](https://img.shields.io/badge/macOS-12%2B-blue)
+![Linux and Windows](https://img.shields.io/badge/Linux%20%7C%20Windows-preview-orange)
 ![Apple Silicon and Intel](https://img.shields.io/badge/Apple%20Silicon%20%7C%20Intel-universal-lightgrey)
 [![License](https://img.shields.io/badge/license-Apache%202.0-green)](LICENSE)
 
@@ -39,6 +40,8 @@ check them on your own server.
 
 ## Install
 
+### macOS
+
 With [Homebrew](https://brew.sh):
 
 ```sh
@@ -51,6 +54,22 @@ universal app for Apple Silicon and Intel Macs. It installs next to the
 official app and does not touch its settings.
 
 Update with `brew upgrade --cask mattermost-go`.
+
+### Linux and Windows (preview)
+
+The [latest release](https://github.com/txchen/mattermostgo/releases/latest)
+has builds for x86-64 and ARM64. They come from the same code as the Mac
+app, but nobody has tested them on these systems yet: please
+[report](https://github.com/txchen/mattermostgo/issues) what you find.
+
+- **Debian, Ubuntu:** `sudo apt install ./mattermost-go_VERSION_amd64.deb`
+- **Fedora, openSUSE:** `sudo dnf install ./mattermost-go-VERSION-1.x86_64.rpm`
+- **Any distribution:** unpack `mattermost-go-VERSION-linux-amd64.tar.gz` and run `./install.sh`.
+- **Windows 10 and 11:** run `mattermost-go-setup-VERSION-amd64.exe`. It installs for
+  your user, without administrator rights. The installer is not signed yet,
+  so SmartScreen asks before it runs: choose *More info*, then *Run anyway*.
+
+The Linux packages need GTK 3, which desktop distributions have.
 
 ## What it does
 
@@ -106,12 +125,14 @@ Update with `brew upgrade --cask mattermost-go`.
 - Servers with self-signed certificates, client certificates, and proxies
   that ask for a password.
 - Uploading custom emoji, and push and email notification settings.
-- Linux and Windows. The code builds there, but nobody has tested it.
+- Tested Linux and Windows builds. The packages are there, but nobody has
+  tried them yet, and the Windows installer is not signed.
 
 ## Privacy
 
 The app talks only to the servers you add. Session tokens stay in the
-macOS Keychain. Link previews come from your server, which fetches them;
+system keychain (the macOS Keychain, the Secret Service on Linux, the
+Credential Manager on Windows). Link previews come from your server, which fetches them;
 their images load straight from the sites they are on. There is no
 telemetry.
 

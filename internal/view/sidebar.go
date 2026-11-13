@@ -3,6 +3,7 @@ package view
 import (
 	"cmp"
 	"fmt"
+	"runtime"
 	"slices"
 	"strconv"
 	"strings"
@@ -74,6 +75,9 @@ func initials(name string) string {
 	}
 	return string(out)
 }
+
+// findKey is the shortcut of the switcher, as the platform writes it.
+var findKey = map[bool]string{true: "⌘K", false: "Ctrl+K"}[runtime.GOOS == "darwin"]
 
 func count(n int64) string {
 	if n > 99 {
@@ -288,7 +292,7 @@ func (v *View) sidebar(c *ui.Context, s *app.Server) {
 						v.newCategory(s, "")
 					}
 					menuDivider(c)
-					if menuRow(c, "dm", "Open a direct message", "⌘K", false) {
+					if menuRow(c, "dm", "Open a direct message", findKey, false) {
 						v.plusMenu = false
 						v.switcher = switcher{open: true, query: "@"}
 					}
