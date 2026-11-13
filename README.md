@@ -1,81 +1,128 @@
+<div align="center">
+
+<img src="resources/icon.png" width="96" alt="">
+
 # Mattermost Go
 
-A native desktop client for [Mattermost](https://mattermost.com), written in Go
-with [mygo](https://github.com/egoist/mygo). It draws its whole interface with
-mygo's native UI toolkit, with no webview and no bundled browser engine, and
-talks to the Mattermost server through its REST API and WebSocket.
+**A native Mattermost client for macOS. No Electron, no browser engine.**
 
-Goals, in order:
+[![Release](https://img.shields.io/github/v/release/txchen/mattermostgo)](https://github.com/txchen/mattermostgo/releases/latest)
+![macOS 12+](https://img.shields.io/badge/macOS-12%2B-blue)
+![Apple Silicon and Intel](https://img.shields.io/badge/Apple%20Silicon%20%7C%20Intel-universal-lightgrey)
+[![License](https://img.shields.io/badge/license-Apache%202.0-green)](LICENSE)
 
-1. Small and frugal. A single binary of a few megabytes, near-zero CPU when
-   idle, memory well under the official Electron client.
-2. The everyday chat features first. Rare or advanced features are tracked
-   in [the deferred list](.scratch/desktop-v1/spec.md#deferred) instead of built.
-3. macOS first. Linux and Windows build but are not verified yet.
+</div>
 
-Status: first working version. You can add servers, log in with a
-password and MFA, read and write in channels, DMs and threads, and get
-posts, reactions, typing and read state in real time, manage channels,
-sidebar categories and members, and make webhooks, slash commands and bot
-accounts. Link previews and message attachments show as in the webapp.
-Search, saved and pinned posts, the Threads view, settings with soft dark
-themes, and pop-out windows came in 0.3.0; interactive messages and
-dialogs, jumping to a post, and editing integrations in 0.4.0. Everything is
-checked against a real Mattermost server. Signing, the icon and
-notification checks are still open; see [the issues](.scratch/desktop-v1/issues/).
+![Mattermost Go, with a channel and a thread open](docs/screenshots/light.png)
 
-## Build and run
+Mattermost Go talks to your Mattermost server through its API and draws
+the whole interface natively in Go. It works like the official app (the
+same sidebar, threads, search and integrations) at a fraction of its
+size and memory, and next to no CPU while it waits in the background.
 
-You need Go 1.27 on macOS 12 or later.
+## Smaller and lighter
 
-```sh
-go run ./cmd/mattermostgo        # run from source
-go tool mygo dev                 # rebuild and restart on every edit
-go tool mygo build               # build/darwin-arm64/Mattermost Go.app and a dmg
-```
+Measured on an Apple M1 against the official Mattermost Desktop 6.3.2:
 
-## Test
+| | Mattermost Go | Official desktop app |
+|---|---:|---:|
+| Download | **9 MB** | 232 MB |
+| App on disk | **30 MB** | 296 MB |
+| Processes | **1** | 11 |
+| Memory | **98 MB**, logged in with a channel open | 338 MB, before adding a server |
+| CPU in the background, per minute | **under 0.01 s** | 1.0 s |
 
-```sh
-go test ./...                    # unit and view tests, no server needed
-scripts/devserver.sh start       # a local Mattermost server on :8065, seeded
-MM_E2E_URL=http://localhost:8065 MM_E2E_MFA=/tmp/mmserver/mfa-secret go test ./internal/e2e
-scripts/devserver.sh stop
-```
+Both download sizes are of the universal apps. The official app was
+measured on its first screen, before it loads the webapp, so its real use
+is higher. [How these were measured](docs/benchmarks.md), and how to
+check them on your own server.
 
-`scripts/devserver.sh` needs `brew install postgresql@17` and builds the
-server from source, so it needs no Docker. The seeded users are `alice`,
-`bob`, `carol` and `mfauser`, all with the password `Password1!`.
-Set `MM_FRAMES=<dir>` to save what the window shows during the view and
-end-to-end tests as PNGs. `MMGO_DEBUG=1` logs the WebSocket messages.
+## Install
 
-Development builds link mygo's automation plugin, which listens only
-when `MYGO_AUTOMATION` names a socket; release builds leave it out.
-Two scripts drive the real window that way, against the dev server:
+With [Homebrew](https://brew.sh):
 
 ```sh
-go install github.com/egoist/mygo/plugins/automation/cmd/mygo-automation
-go tool mygo build -debug
-open -n "build/darwin-arm64/Mattermost Go.app" --env MYGO_AUTOMATION=/tmp/mmapp.sock \
-  --env MYGO_FRAME_STATS=all --stderr /tmp/mmapp.log
-# log in as alice in the window, then:
-MM_APP="build/darwin-arm64/Mattermost Go.app" scripts/realwindow.sh  # 18 interactions, checked on the server
-go run ./scripts/seed -big 5000 && scripts/perf/bigscroll.sh         # frame times scrolling 5,000 posts
+brew install --cask txchen/tap/mattermost-go
 ```
 
-The window must be on screen for frame times: macOS does not present a
-window while the display sleeps. `go test -bench ScrollBigChannel
-./internal/view` measures the same scroll without a window.
+Or download the dmg from the [latest release](https://github.com/txchen/mattermostgo/releases/latest).
+The app is signed and notarized, runs on macOS 12 or later, and is one
+universal app for Apple Silicon and Intel Macs. It installs next to the
+official app and does not touch its settings.
 
-## Documents
+Update with `brew upgrade --cask mattermost-go`.
 
-- [Analysis](docs/analysis.md) explains what the official client does and what mygo offers.
-- [Design](docs/design.md) covers the architecture, data model and performance rules.
-- [ADRs](docs/adr/) record the decisions and why we made them.
-- [v1 spec](.scratch/desktop-v1/spec.md) defines the scope, and the [issues](.scratch/desktop-v1/issues/) are the work items.
-- [Glossary](GLOSSARY.md) defines the domain vocabulary.
+## What it does
+
+**Chat**
+- Channels, direct and group messages, and Collapsed Reply Threads, with the
+  Threads view of the threads you follow.
+- Markdown with code highlighting, tables, emoji, mentions and channel links;
+  link previews and message attachments.
+- Reactions, edits, pinned and saved messages, reminders, forwarding, and
+  edit history.
+- An emoji picker with skin tones and your server's custom emoji.
+- Files by drag, paste or picker, and a preview for images, text and code,
+  with Quick Look for the rest.
+- Real-time posts, reactions, typing and read state across your devices.
+
+**Find things**
+- Search messages and files, Recent mentions, Saved messages.
+- Jump to any post from a result or a link.
+- Find channels and people with ⌘K, and go back and forward with ⌘[ and ⌘].
+
+**Organize**
+- Sidebar categories you can drag, sort, mute and collapse; favorites;
+  unread channels grouped first if you like.
+- Create, browse, rename, archive and unarchive channels; edit headers and
+  purposes; manage members and channel admins; convert between public and
+  private.
+- Open any channel or thread in a window of its own.
+
+**Integrations**
+- Incoming and outgoing webhooks, slash commands and bot accounts with
+  tokens, created and edited in the app.
+- Buttons, menus and dialogs from bots and integrations.
+- Slash commands complete as you type.
+
+**You**
+- Status, Do Not Disturb with an end time, and custom status.
+- Your profile, picture, password, multi-factor authentication, sessions
+  and personal access tokens.
+- Desktop notifications with your server's rules, per-channel preferences,
+  and the Dock badge.
+- Light and dark themes, including soft dark ones (One Dark, Nord, Dusk)
+  that follow the system if you want; 12 or 24 hour clock; compact
+  messages.
+- Several servers at once, each with its own login.
+
+![The same window in the One Dark theme](docs/screenshots/dark.png)
+
+## Not there yet
+
+- Single sign-on (GitLab, Google, Office 365, SAML, OpenID). Logging in
+  takes a username or email and a password, with MFA.
+- Plugins with their own interface, such as Calls, Boards and Playbooks.
+- Servers with self-signed certificates, client certificates, and proxies
+  that ask for a password.
+- Uploading custom emoji, and push and email notification settings.
+- Linux and Windows. The code builds there, but nobody has tested it.
+
+## Privacy
+
+The app talks only to the servers you add. Session tokens stay in the
+macOS Keychain. Link previews come from your server, which fetches them;
+their images load straight from the sites they are on. There is no
+telemetry.
+
+## Contributing
+
+[CONTRIBUTING.md](CONTRIBUTING.md) covers building from source, the test
+server, and the end-to-end and real-window checks. The
+[design](docs/design.md) and the [decisions](docs/adr/) explain how the
+app is put together.
 
 ## License
 
 Apache 2.0. Mattermost is a trademark of Mattermost, Inc. This project is
-not affiliated with Mattermost, Inc.
+not affiliated with or endorsed by Mattermost, Inc.
