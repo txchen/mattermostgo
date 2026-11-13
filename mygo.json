@@ -2,7 +2,7 @@
   "name": "Mattermost Go",
   "slug": "mattermost-go",
   "identifier": "com.github.txchen.mattermostgo",
-  "version": "0.2.1",
+  "version": "0.3.0",
   "copyright": "© 2026 Mattermost Go contributors",
   "license": "Apache-2.0",
   "main": "./cmd/mattermostgo",
