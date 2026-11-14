@@ -1,5 +1,9 @@
 # Changelog
 
+## 0.5.4
+
+- You no longer turn Away while you use the computer. The app now tells the server every minute that you are active, as the official app does, and that you stopped once you leave the keyboard and mouse for five minutes; the server then sets Away. A status you chose yourself stays as it is.
+
 ## 0.5.3
 
 - "Check for Updates…" is in the Mattermost Go menu of the Mac menu bar, after About, as in other Mac apps. It stays in the account menu too.

@@ -415,6 +415,14 @@ func (s *Socket) fetch(ctx context.Context, f fetch) {
 }
 
 // Typing tells the server the user is typing in a channel or thread.
+// ActiveStatus tells the server whether the user uses the computer, as
+// the official desktop app does: the server keeps a user it hears nothing
+// from online for its away timeout only, then makes them away. It
+// changes no status the user set by hand.
+func (s *Socket) ActiveStatus(active bool) {
+	s.send("user_update_active_status", map[string]any{"user_is_active": active, "manual": false})
+}
+
 func (s *Socket) Typing(ch store.ChannelID, parent store.PostID) {
 	s.send("user_typing", map[string]any{"channel_id": ch, "parent_id": parent})
 }

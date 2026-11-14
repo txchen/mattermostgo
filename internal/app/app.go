@@ -106,8 +106,11 @@ type App struct {
 	ConfigPath string
 	// Focused reports whether the window has the user's attention.
 	Focused func() bool
-	Notify  func(Notification)
-	Badge   func(mentions int64, unread bool)
+	// IdleTime is how long the user has not used the keyboard or mouse,
+	// 0 when the system does not say; nil counts the user as active.
+	IdleTime func() time.Duration
+	Notify   func(Notification)
+	Badge    func(mentions int64, unread bool)
 	// Error shows an error that belongs to no form.
 	Error func(msg string)
 	// OpenExternal opens a link in the browser, and Reveal a file in Finder.
@@ -380,6 +383,7 @@ func (a *App) connect(s *Server) {
 				reload(true)
 			}
 		}}
+	go a.reportActivity(ctx, s, st)
 	go func() {
 		me, err := c.Me(ctx)
 		if errors.Is(err, mm.ErrUnauthorized) {
@@ -1056,4 +1060,39 @@ func (a *App) ChannelName(s *Server, ch *store.Channel) string {
 		return ch.DisplayName
 	}
 	return ch.Name
+}
+
+// ActivityEvery is how often the app tells the server the user is active,
+// as the official desktop app does every minute, and AwayAfter how long
+// without input counts as away. Tests shorten them.
+var (
+	ActivityEvery = time.Minute
+	AwayAfter     = 5 * time.Minute
+)
+
+// reportActivity tells the server, while the session lasts, whether the
+// user uses the computer: online while they do, and once that they
+// stopped, which lets the server make them away. Without it the server
+// makes a user away after its timeout, however much they use the app.
+func (a *App) reportActivity(ctx context.Context, s *Server, st *store.Store) {
+	tick := time.NewTicker(ActivityEvery)
+	defer tick.Stop()
+	wasActive := true
+	for {
+		select {
+		case <-ctx.Done():
+			return
+		case <-tick.C:
+		}
+		a.Run(func() {
+			if s.Store != st || s.socket == nil {
+				return
+			}
+			active := a.IdleTime == nil || a.IdleTime() < AwayAfter
+			if active || wasActive {
+				go s.socket.ActiveStatus(active)
+			}
+			wasActive = active
+		})
+	}
 }

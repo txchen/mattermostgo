@@ -90,7 +90,13 @@ func newClient(t *testing.T) *client {
 // cond holds.
 func (c *client) until(what string, cond func() bool) {
 	c.t.Helper()
-	deadline := time.Now().Add(15 * time.Second)
+	c.untilFor(what, 15*time.Second, cond)
+}
+
+// untilFor is until with a time limit of its own.
+func (c *client) untilFor(what string, limit time.Duration, cond func() bool) {
+	c.t.Helper()
+	deadline := time.Now().Add(limit)
 	for {
 		c.mu.Lock()
 		q := c.queue

@@ -172,6 +172,7 @@ func main() {
 			Content:       ui.View(v.Build),
 		})
 		a.Focused = func() bool { return win.IsFocused() && !mygo.App.IsHidden() }
+		a.IdleTime = mygo.Power.IdleTime
 		win.OnFocus(func() { a.Run(a.WindowFocused) })
 		if err := a.Start(); err != nil {
 			a.Error("Reading the servers: " + err.Error())
