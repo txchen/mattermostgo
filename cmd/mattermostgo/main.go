@@ -8,11 +8,14 @@ import (
 	"net/http"
 	"os"
 	"path/filepath"
+	"runtime"
 	"sync"
 	"time"
 
 	"github.com/egoist/mygo"
 	"github.com/egoist/mygo/netproxy"
+	"github.com/egoist/mygo/plugins/updater"
+	"github.com/egoist/mygo/plugins/updater/native"
 	"github.com/egoist/mygo/ui"
 
 	"github.com/txchen/mattermostgo/internal/app"
@@ -23,6 +26,11 @@ import (
 func main() {
 	if !mygo.App.RequestSingleInstanceLock() {
 		return
+	}
+	// Linux and Windows update themselves from the GitHub releases; the
+	// Mac app updates with Homebrew.
+	if runtime.GOOS != "darwin" {
+		mygo.Use(native.Plugin)
 	}
 	var win *mygo.Window
 	// popouts are the windows of channels and threads opened on their
@@ -83,6 +91,9 @@ func main() {
 				})
 				w.Show()
 			},
+		}
+		if runtime.GOOS != "darwin" {
+			v.Hooks.CheckForUpdates = updater.CheckForUpdates
 		}
 		a.Error = func(msg string) {
 			v.ShowError(msg)

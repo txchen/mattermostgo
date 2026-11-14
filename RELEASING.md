@@ -7,16 +7,23 @@ the login keychain, and the notary credentials stored there as
 
 1. Set `version` in `mygo.json`, run `go test ./...` and the end-to-end
    and real-window checks of the README, and commit.
-2. Build, sign and notarize a universal app and disk image, and the
-   Linux and Windows packages (the Windows installers need
-   `brew install makensis`):
+2. Build, sign and notarize the Mac app and disk image, then the Linux and
+   Windows packages with their signed updates (the Windows installers need
+   `brew install makensis`; the update key is in
+   `~/Library/Application Support/mygo/update-keys`, kept out of the
+   repository, with a copy in the password manager):
 
    ```sh
-   rm -rf build && go tool mygo build -platform darwin/universal,linux/amd64,linux/arm64,windows/amd64,windows/arm64
+   rm -rf build && go tool mygo build -platform darwin/universal
+   MYGO_UPDATER_PRIVATE_KEY="$(cat ~/Library/Application\ Support/mygo/update-keys/mygo-update.key)" \
+     go tool mygo build -platform linux/amd64,linux/arm64,windows/amd64,windows/arm64
    ```
 
-   The Windows installers are not signed: no Windows certificate is set
-   up, so SmartScreen warns before they run.
+   The Mac build has no update key, so it writes no update files: the Mac
+   app updates with Homebrew. The Windows installers are not signed: no
+   Windows certificate is set up, so SmartScreen warns before they run.
+   Write the version's section of `CHANGELOG.md` first: the update window
+   shows it.
 
 3. Check the result before publishing:
 
@@ -26,7 +33,7 @@ the login keychain, and the notary credentials stored there as
    xcrun stapler validate mattermost-go-VERSION.dmg
    lipo -archs "Mattermost Go.app/Contents/MacOS/Mattermost Go"   # arm64 x86_64
    shasum -a 256 mattermost-go-VERSION.dmg > mattermost-go-VERSION.dmg.sha256
-   cd .. && shasum -a 256 */*.deb */*.rpm */*.tar.gz */*setup*.exe darwin-universal/*.dmg | sed 's|  [a-z0-9-]*/|  |' > SHA256SUMS
+   cd .. && cat darwin-universal/*.sha256 >> SHA256SUMS
    ```
 
 4. Tag, push and publish:
@@ -35,9 +42,14 @@ the login keychain, and the notary credentials stored there as
    git tag vVERSION && git push origin main vVERSION
    gh release create vVERSION build/darwin-universal/mattermost-go-VERSION.dmg \
      build/darwin-universal/mattermost-go-VERSION.dmg.sha256 build/linux-*/*.deb build/linux-*/*.rpm \
-     build/linux-*/*.tar.gz build/windows-*/*setup*.exe build/SHA256SUMS \
+     build/linux-*/*.tar.gz build/linux-*/update-*.json build/linux-amd64/install.sh \
+     build/windows-*/*setup*.exe build/windows-*/*.tar.gz build/windows-*/update-*.json \
+     build/windows-amd64/install.ps1 build/SHA256SUMS \
      --title "Mattermost Go VERSION" --notes-file NOTES.md
    ```
+
+   Installed Linux and Windows apps read `update-<platform>.json` of the
+   latest release and update to it.
 
 5. Update `Casks/mattermost-go.rb` in `txchen/homebrew-tap` with the
    version and the dmg's SHA-256, push it, and check the install:

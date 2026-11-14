@@ -2,7 +2,7 @@
   "name": "Mattermost Go",
   "slug": "mattermost-go",
   "identifier": "com.github.txchen.mattermostgo",
-  "version": "0.5.0",
+  "version": "0.5.1",
   "copyright": "© 2026 Mattermost Go contributors",
   "license": "Apache-2.0",
   "main": "./cmd/mattermostgo",
@@ -32,5 +32,9 @@
       "libsecret-1-0"
     ]
   },
-  "publisher": "Mattermost Go contributors"
+  "publisher": "Mattermost Go contributors",
+  "updates": {
+    "publicKey": "AHIM8J7LEdQ8E1lmQCPuL1wZ5BQfJOcONvfyqfs/5nc=",
+    "github": "txchen/mattermostgo"
+  }
 }

@@ -57,17 +57,36 @@ Update with `brew upgrade --cask mattermost-go`.
 
 ### Linux and Windows (preview)
 
-The [latest release](https://github.com/txchen/mattermostgo/releases/latest)
-has builds for x86-64 and ARM64. They come from the same code as the Mac
-app, but nobody has tested them on these systems yet: please
+Builds for x86-64 and ARM64 come from the same code as the Mac app, but
+nobody has tested them on these systems yet: please
 [report](https://github.com/txchen/mattermostgo/issues) what you find.
 
-- **Debian, Ubuntu:** `sudo apt install ./mattermost-go_VERSION_amd64.deb`
-- **Fedora, openSUSE:** `sudo dnf install ./mattermost-go-VERSION-1.x86_64.rpm`
-- **Any distribution:** unpack `mattermost-go-VERSION-linux-amd64.tar.gz` and run `./install.sh`.
-- **Windows 10 and 11:** run `mattermost-go-setup-VERSION-amd64.exe`. It installs for
-  your user, without administrator rights. The installer is not signed yet,
-  so SmartScreen asks before it runs: choose *More info*, then *Run anyway*.
+**Linux**, for your user, without root, and updating itself:
+
+```sh
+curl -fsSL https://github.com/txchen/mattermostgo/releases/latest/download/install.sh | sh
+```
+
+Or install the `.deb` (Debian, Ubuntu) or `.rpm` (Fedora, openSUSE) from the
+[latest release](https://github.com/txchen/mattermostgo/releases/latest)
+with `sudo apt install ./mattermost-go_VERSION_amd64.deb` or
+`sudo dnf install ./mattermost-go-VERSION-1.x86_64.rpm`. These do not update
+themselves: install the next release's package over them.
+
+**Windows 10 and 11**, in PowerShell, for your user, and updating itself:
+
+```powershell
+irm https://github.com/txchen/mattermostgo/releases/latest/download/install.ps1 | iex
+```
+
+Or run `mattermost-go-setup-VERSION-amd64.exe` from the latest release. The
+installer is not signed yet, so SmartScreen asks before it runs: choose
+*More info*, then *Run anyway*.
+
+On Linux and Windows the app checks for a new version once a day, shows
+what is new, and installs it when you agree; "Check for Updates…" is in
+the account menu. Updates are signed, and the app checks the signature
+before it installs one.
 
 The Linux packages need GTK 3, which desktop distributions have.
 

@@ -145,6 +145,12 @@ func (v *View) accountMenu(m *ui.Menu, c *ui.Context, s *app.Server) {
 	if iconItem(m, "Profile", "person").Chosen() {
 		v.openProfile(me)
 	}
+	if v.Hooks.CheckForUpdates != nil {
+		m.Separator()
+		if m.Item("Check for Updates…").Chosen() {
+			v.Hooks.CheckForUpdates()
+		}
+	}
 	m.Separator()
 	if iconItem(m, "Log out", "rectangle.portrait.and.arrow.right").Chosen() {
 		a.Logout(s)
