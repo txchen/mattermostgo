@@ -1,5 +1,9 @@
 # Changelog
 
+## 0.5.2
+
+- The Mac app updates itself too: it checks for a new version once a day, shows what is new, and installs it when you agree; the update takes over when you quit the app. "Check for Updates…" is in the account menu. Homebrew leaves the app to update itself.
+
 ## 0.5.1
 
 - Linux and Windows update themselves: the app checks for a new version in the background, shows what is new, and installs it when you agree. "Check for Updates…" is in the account menu. The Mac app keeps updating with Homebrew, and the Debian and RPM packages with your package manager.

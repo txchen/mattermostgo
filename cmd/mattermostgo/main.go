@@ -8,7 +8,6 @@ import (
 	"net/http"
 	"os"
 	"path/filepath"
-	"runtime"
 	"sync"
 	"time"
 
@@ -27,11 +26,9 @@ func main() {
 	if !mygo.App.RequestSingleInstanceLock() {
 		return
 	}
-	// Linux and Windows update themselves from the GitHub releases; the
-	// Mac app updates with Homebrew.
-	if runtime.GOOS != "darwin" {
-		mygo.Use(native.Plugin)
-	}
+	// The app updates itself from the GitHub releases: Homebrew leaves it
+	// to, as its cask says auto_updates.
+	mygo.Use(native.Plugin)
 	var win *mygo.Window
 	// popouts are the windows of channels and threads opened on their
 	// own, which draw again with the main window.
@@ -92,9 +89,7 @@ func main() {
 				w.Show()
 			},
 		}
-		if runtime.GOOS != "darwin" {
-			v.Hooks.CheckForUpdates = updater.CheckForUpdates
-		}
+		v.Hooks.CheckForUpdates = updater.CheckForUpdates
 		a.Error = func(msg string) {
 			v.ShowError(msg)
 			if win != nil {

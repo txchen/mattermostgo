@@ -56,8 +56,7 @@ type attachment struct {
 type Hooks struct {
 	PickFiles      func(done func(paths []string))
 	ClipboardImage func() []byte
-	// CheckForUpdates checks for a new version as the user asks, where
-	// the app updates itself; nil where it does not, as on macOS.
+	// CheckForUpdates checks for a new version as the user asks.
 	CheckForUpdates func()
 	// OpenWindow opens a window of its own showing build.
 	OpenWindow func(title string, build func(c *ui.Context))

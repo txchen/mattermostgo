@@ -53,7 +53,9 @@ The app is signed and notarized, runs on macOS 12 or later, and is one
 universal app for Apple Silicon and Intel Macs. It installs next to the
 official app and does not touch its settings.
 
-Update with `brew upgrade --cask mattermost-go`.
+The app updates itself: it checks for a new version once a day, shows
+what is new, and installs it when you agree ("Check for Updates…" in the
+account menu). Homebrew leaves it to, so `brew upgrade` does not touch it.
 
 ### Linux and Windows (preview)
 
@@ -83,9 +85,8 @@ Or run `mattermost-go-setup-VERSION-amd64.exe` from the latest release. The
 installer is not signed yet, so SmartScreen asks before it runs: choose
 *More info*, then *Run anyway*.
 
-On Linux and Windows the app checks for a new version once a day, shows
-what is new, and installs it when you agree; "Check for Updates…" is in
-the account menu. Updates are signed, and the app checks the signature
+There too the app checks for a new version once a day and installs it
+when you agree. Updates are signed, and the app checks the signature
 before it installs one.
 
 The Linux packages need GTK 3, which desktop distributions have.
