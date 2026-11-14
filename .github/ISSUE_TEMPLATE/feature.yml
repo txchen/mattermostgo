@@ -1,0 +1,24 @@
+name: Feature request
+description: Something the official app does, or something new, that you would like here.
+labels: [enhancement]
+body:
+  - type: textarea
+    id: what
+    attributes:
+      label: What you would like
+      description: What you want to do, and how you do it today, as in the official app.
+    validations:
+      required: true
+  - type: dropdown
+    id: official
+    attributes:
+      label: Does the official Mattermost app have it?
+      options:
+        - "Yes"
+        - "No"
+        - Not sure
+  - type: textarea
+    id: why
+    attributes:
+      label: Why it matters to you
+      description: How often you would use it, and what it blocks now.

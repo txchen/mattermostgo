@@ -197,3 +197,24 @@ which the client does not do; why it dropped is not known. Opening
 costs 12 MB more, a guess being the preferences, the followed threads
 of every team and the larger emoji table loaded at start; the cause is
 not measured. Idle stays at zero frames.
+
+## Where the 12 MB went, 2026-11-13
+
+`TestMemoryOpening` (internal/e2e/mem_test.go) logs in as alice, opens
+Big Channel after the Town Square the app opens first, draws, collects
+garbage and writes the heap. Run on v0.1.1 and on the 0.5 tree:
+
+| | Go heap in use | Go Sys |
+|---|---:|---:|
+| 0.1.1 | 6.9 MB | 22.3 MB |
+| 0.5, link previews on | 13.1 MB | 30.8 MB |
+| 0.5, link previews off (the display setting) | 8.2 MB | 22.5 MB |
+
+The difference is the link previews of Town Square, which 0.1.1 did not
+show: their decoded images (`media.Fit`, 3.7 MB against 0.5 MB, most of
+it the GitHub card picture at 1000 px wide) and the text laid out for
+them. With previews off the process takes what 0.1.1 took; the 1.3 MB
+of heap left is the larger emoji table with categories and skin tones
+(0.5 MB) and the state of the new features. Nothing leaks: it is memory
+for what the window shows, and it goes when the LRU drops the timeline.
+The guess above, preferences and threads, was wrong.

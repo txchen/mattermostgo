@@ -1,0 +1,54 @@
+name: CI
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+
+permissions:
+  contents: read
+
+jobs:
+  test:
+    name: Test on ${{ matrix.name }}
+    runs-on: ${{ matrix.os }}
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - { name: macOS, os: macos-latest }
+          - { name: Linux, os: ubuntu-latest }
+          - { name: Windows, os: windows-latest }
+    steps:
+      - uses: actions/checkout@v7
+      - uses: actions/setup-go@v7
+        with:
+          go-version-file: go.mod
+      - name: Check the format
+        if: runner.os != 'Windows'
+        run: test -z "$(gofmt -l internal cmd scripts)"
+      - run: go vet ./...
+      # The end-to-end tests skip without a server (MM_E2E_URL); the view
+      # tests draw the window headless.
+      - run: go test ./...
+
+  packages:
+    name: Linux and Windows packages
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v7
+      - uses: actions/setup-go@v7
+        with:
+          go-version-file: go.mod
+      - name: Install NSIS, for the Windows installers
+        run: sudo apt-get update && sudo apt-get install -y nsis
+      - run: go tool mygo build -platform linux/amd64,linux/arm64,windows/amd64,windows/arm64
+      - uses: actions/upload-artifact@v5
+        with:
+          name: packages
+          path: |
+            build/linux-*/*.deb
+            build/linux-*/*.rpm
+            build/linux-*/*.tar.gz
+            build/windows-*/*setup*.exe
+          if-no-files-found: error

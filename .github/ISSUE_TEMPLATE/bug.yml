@@ -1,0 +1,69 @@
+name: Bug report
+description: Something does not work, or works differently from the official app.
+labels: [bug]
+body:
+  - type: markdown
+    attributes:
+      value: |
+        Thanks for reporting. Please leave out server addresses, names and messages you would rather not post in public.
+  - type: dropdown
+    id: platform
+    attributes:
+      label: System
+      options:
+        - macOS (Apple Silicon)
+        - macOS (Intel)
+        - Linux x86-64
+        - Linux ARM64
+        - Windows x86-64
+        - Windows ARM64
+    validations:
+      required: true
+  - type: input
+    id: system-version
+    attributes:
+      label: System version
+      description: As macOS 15.2, Ubuntu 24.04 with GNOME on Wayland, or Windows 11 24H2.
+    validations:
+      required: true
+  - type: input
+    id: version
+    attributes:
+      label: Mattermost Go version
+      description: The name of the file you installed, or `brew info --cask mattermost-go`.
+      placeholder: "0.5.0"
+    validations:
+      required: true
+  - type: input
+    id: server
+    attributes:
+      label: Mattermost server version
+      description: In the webapp under Help › About, if you know it.
+  - type: dropdown
+    id: install
+    attributes:
+      label: Installed with
+      options:
+        - Homebrew
+        - The dmg
+        - The Debian package
+        - The RPM package
+        - The tarball and install.sh
+        - The Windows installer
+        - Built from source
+  - type: textarea
+    id: what
+    attributes:
+      label: What happened
+      description: What you did, what you expected, and what you saw instead.
+      placeholder: |
+        1. Open a channel with a thread
+        2. Click the thread's reply count
+        3. Expected the thread to open, saw nothing happen
+    validations:
+      required: true
+  - type: textarea
+    id: extra
+    attributes:
+      label: Screenshots or logs
+      description: A screenshot helps. On macOS, `open -n "/Applications/Mattermost Go.app" --env MMGO_DEBUG=1 --stderr /tmp/mmgo.log` logs what the app hears from the server.

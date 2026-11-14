@@ -58,7 +58,10 @@ if $A snapshot | grep -q '"@bob"'; then pass "@ suggests users"; else fail "@ su
 $A key Enter >/dev/null; send "hi $RUN"
 [ "$(last "$TOWN" message)" = "@bob hi $RUN" ] && pass "Enter completes the mention" || fail "Enter completes the mention" "$(last "$TOWN" message)"
 
-$A type ":tad" --settle >/dev/null; sleep 0.5; $A key Tab >/dev/null; send "done $RUN"
+$A type ":tad" --settle >/dev/null
+# Tab completes only once the suggestion shows; a fixed sleep raced it.
+n=0; until $A snapshot | grep -q ':tada:' || [ $n -ge 20 ]; do sleep 0.1; n=$((n+1)); done
+$A key Tab >/dev/null; send "done $RUN"
 [ "$(last "$TOWN" message)" = ":tada: done $RUN" ] && pass "Tab completes an emoji" || fail "Tab completes an emoji" "$(last "$TOWN" message)"
 
 $A key Up >/dev/null; sleep 0.5
