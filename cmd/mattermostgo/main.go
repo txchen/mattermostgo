@@ -8,6 +8,7 @@ import (
 	"net/http"
 	"os"
 	"path/filepath"
+	"runtime"
 	"sync"
 	"time"
 
@@ -55,6 +56,28 @@ func main() {
 		a.Run(func() { a.OpenDeepLink(url) })
 	})
 	mygo.App.WhenReady(func() {
+		if runtime.GOOS == "darwin" {
+			// The menus of macOS, with Check for Updates after About, where
+			// Mac apps put it.
+			mygo.App.SetMenu(mygo.NewMenu([]*mygo.MenuItem{
+				{Label: "Mattermost Go", Submenu: []*mygo.MenuItem{
+					{Role: mygo.RoleAbout},
+					updater.MenuItem(),
+					mygo.Separator(),
+					{Role: mygo.RoleServices},
+					mygo.Separator(),
+					{Role: mygo.RoleHide},
+					{Role: mygo.RoleHideOthers},
+					{Role: mygo.RoleUnhide},
+					mygo.Separator(),
+					{Role: mygo.RoleQuit},
+				}},
+				{Role: mygo.RoleFileMenu},
+				{Role: mygo.RoleEditMenu},
+				{Role: mygo.RoleViewMenu},
+				{Role: mygo.RoleWindowMenu},
+			}))
+		}
 		data, err := mygo.App.Path(mygo.PathUserData)
 		if err != nil {
 			log.Fatal(err)

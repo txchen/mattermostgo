@@ -1,5 +1,9 @@
 # Changelog
 
+## 0.5.3
+
+- "Check for Updates…" is in the Mattermost Go menu of the Mac menu bar, after About, as in other Mac apps. It stays in the account menu too.
+
 ## 0.5.2
 
 - The Mac app updates itself too: it checks for a new version once a day, shows what is new, and installs it when you agree; the update takes over when you quit the app. "Check for Updates…" is in the account menu. Homebrew leaves the app to update itself.
