@@ -9,6 +9,7 @@ import (
 	"strings"
 
 	"github.com/egoist/mygo/ui"
+	mdview "github.com/egoist/mygo/ui/markdown"
 
 	"github.com/txchen/mattermostgo/internal/app"
 	"github.com/txchen/mattermostgo/internal/markdown"
@@ -22,14 +23,12 @@ func (v *View) emoji(c *ui.Context, s *app.Server, name string, size float32) {
 		ui.Text(c, e).FontSize(size)
 		return
 	}
-	id, ok := v.App.CustomEmojis(s)[name]
-	cl := s.Client()
-	if !ok || cl == nil {
+	if _, ok := v.App.CustomEmojis(s)[name]; !ok {
 		ui.Text(c, ":"+name+":").FontSize(size * 0.6)
 		return
 	}
 	px := size * 1.25
-	bmp := v.Media.Get(fmt.Sprintf("emoji:%s:%s", s.Config.ID, id), int(px*2), func(ctx context.Context) ([]byte, error) { return cl.EmojiImage(ctx, id) })
+	bmp := v.emojiPicture(s, name)
 	ui.Box(c).Size(px, px).Children(func() {
 		if bmp != nil {
 			ui.Image(c, bmp).Size(px, px).Fit(ui.Contain).Label(":" + name + ":")
@@ -191,4 +190,78 @@ func (v *View) emojiPopover(c *ui.Context, anchor ui.Element, s *app.Server) {
 	if !open {
 		v.picker = emojiPicker{}
 	}
+}
+
+// prepare readies a message for the Markdown view, with the custom emoji
+// of the server it knows.
+func (v *View) prepare(s *app.Server, msg string) string {
+	if !strings.Contains(msg, ":") {
+		return markdown.Prepare(msg)
+	}
+	custom := v.App.CustomEmojis(s)
+	return markdown.PrepareWith(msg, func(name string) bool {
+		_, ok := custom[name]
+		// Only an emoji whose picture loaded becomes a link: the view
+		// asks for the pictures of a paragraph as its text changes, so
+		// the text changes as the picture comes.
+		return ok && v.emojiPicture(s, name) != nil
+	})
+}
+
+// emojiPixels is the size custom emoji decode at, for text up to 24 DIPs
+// on a display of twice the density.
+const emojiPixels = 64
+
+// emojiPicture returns the picture of a custom emoji, or nil while it loads.
+func (v *View) emojiPicture(s *app.Server, name string) *ui.Bitmap {
+	id := v.App.CustomEmojis(s)[name]
+	cl := s.Client()
+	if id == "" || cl == nil {
+		return nil
+	}
+	return v.Media.Get(fmt.Sprintf("emoji:%s:%s", s.Config.ID, id), emojiPixels, func(ctx context.Context) ([]byte, error) { return cl.EmojiImage(ctx, id) })
+}
+
+// customEmoji draws a custom emoji of a message, in the line of its text.
+func (v *View) customEmoji(s *app.Server, dest string, size float32) (mdview.InlineObject, bool) {
+	name, ok := strings.CutPrefix(dest, markdown.EmojiScheme)
+	bmp := v.emojiPicture(s, name)
+	if !ok || bmp == nil {
+		return mdview.InlineObject{}, false
+	}
+	px := size * 1.3
+	return mdview.InlineObject{Width: px, Height: size, Depth: px - size, Draw: func(p *ui.Painter, r ui.Rect) {
+		p.Image(bmp, r, ui.Contain)
+	}}, true
+}
+
+func emojiText(name string) string {
+	if e, ok := markdown.Emoji(name); ok {
+		return e
+	}
+	return ":" + name + ":"
+}
+
+// emojiPicker is the popover that chooses an emoji for a reaction, or
+// for the composer when post is empty.
+type emojiPicker struct {
+	open        bool
+	post        store.PostID
+	fromToolbar bool
+	// inDialog marks the picker of the custom status dialog.
+	inDialog bool
+	// tab is the category shown: 0 for the recent emoji.
+	tab      int
+	composer draftKey
+	query    string
+	insert   func(name string)
+}
+
+// commonEmoji are what the picker shows before anything is typed.
+var commonEmoji = []string{
+	"+1", "-1", "white_check_mark", "heart", "joy", "smile", "slightly_smiling_face", "wink",
+	"tada", "eyes", "pray", "fire", "rocket", "100", "clap", "raised_hands",
+	"thinking_face", "sweat_smile", "sob", "scream", "heart_eyes", "sunglasses", "ok_hand", "wave",
+	"muscle", "point_up", "star", "sparkles", "zap", "bulb", "warning", "x",
+	"heavy_check_mark", "question", "exclamation", "coffee", "beers", "cake", "gift", "trophy",
 }

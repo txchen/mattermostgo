@@ -15,6 +15,8 @@ const (
 	// MentionScheme and ChannelScheme start the links Prepare makes.
 	MentionScheme = "mm-mention:"
 	ChannelScheme = "mm-channel:"
+	// EmojiScheme starts the links of custom emoji.
+	EmojiScheme = "mm-emoji:"
 )
 
 // Emoji returns the text of an emoji by its Mattermost name.
@@ -63,7 +65,11 @@ func EmojiNames(prefix string, n int) []string {
 
 // Prepare rewrites a post's message for the Markdown view. Code spans and
 // code blocks stay as they are.
-func Prepare(msg string) string {
+func Prepare(msg string) string { return PrepareWith(msg, nil) }
+
+// PrepareWith is Prepare, with custom naming the custom emoji of the
+// server, which become links to EmojiScheme for the view to draw.
+func PrepareWith(msg string, custom func(name string) bool) string {
 	if !strings.ContainsAny(msg, ":@~") {
 		return msg
 	}
@@ -88,7 +94,7 @@ func Prepare(msg string) string {
 			b.WriteString(line)
 			continue
 		}
-		prepareLine(&b, line)
+		prepareLine(&b, line, custom)
 	}
 	return b.String()
 }
@@ -106,7 +112,7 @@ func fenceOf(line string) string {
 	return ""
 }
 
-func prepareLine(b *strings.Builder, s string) {
+func prepareLine(b *strings.Builder, s string, custom func(string) bool) {
 	for i := 0; i < len(s); {
 		c := s[i]
 		switch {
@@ -133,8 +139,16 @@ func prepareLine(b *strings.Builder, s string) {
 			}
 		case c == ':':
 			if end := strings.IndexByte(s[i+1:], ':'); end > 0 {
-				if e, ok := emojis[s[i+1:i+1+end]]; ok {
+				name := s[i+1 : i+1+end]
+				if e, ok := emojis[name]; ok {
 					b.WriteString(e)
+					i += end + 2
+					continue
+				}
+				if custom != nil && emojiName(name) && custom(name) {
+					// A zero-width space is the text of the link, which
+					// the view draws the emoji before.
+					b.WriteString("[\u200b](" + EmojiScheme + name + ")")
 					i += end + 2
 					continue
 				}
@@ -218,4 +232,15 @@ func nameLen(s string) int {
 		n--
 	}
 	return n
+}
+
+// emojiName reports whether s can name an emoji: letters, digits, _, -
+// and +.
+func emojiName(s string) bool {
+	for _, r := range s {
+		if !(r >= 'a' && r <= 'z' || r >= 'A' && r <= 'Z' || r >= '0' && r <= '9' || r == '_' || r == '-' || r == '+') {
+			return false
+		}
+	}
+	return s != ""
 }

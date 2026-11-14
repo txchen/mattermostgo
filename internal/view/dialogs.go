@@ -45,10 +45,10 @@ type inviteDialog struct {
 	people addMembersDialog
 }
 
-func (*forwardDialog) isDialog() {}
-func (*historyDialog) isDialog() {}
-func (*peopleDialog) isDialog()  {}
-func (*inviteDialog) isDialog()  {}
+func (d *forwardDialog) show(v *View, c *ui.Context, s *app.Server) { v.forwardDialog(c, s, d) }
+func (d *historyDialog) show(v *View, c *ui.Context, s *app.Server) { v.historyDialog(c, s, d) }
+func (d *peopleDialog) show(v *View, c *ui.Context, s *app.Server)  { v.peopleDialog(c, s, d) }
+func (d *inviteDialog) show(v *View, c *ui.Context, s *app.Server)  { v.inviteDialog(c, s, d) }
 
 func (v *View) openEditHistory(s *app.Server, post *store.Post) {
 	d := &historyDialog{post: post.ID}
@@ -355,6 +355,88 @@ func (v *View) inviteDialog(c *ui.Context, s *app.Server, d *inviteDialog) {
 				}
 				return struct{}{}, nil
 			}, func(struct{}) { v.ShowError("Invitations sent") })
+		})
+	})
+}
+
+// dialog is the one dialog the window shows over the main view, if any;
+// show builds it, inside the modal.
+type dialog interface {
+	show(v *View, c *ui.Context, s *app.Server)
+}
+
+// textDialog asks for one line of text, or several with lines.
+type textDialog struct {
+	title, label, value, submit string
+	lines                       bool
+	save                        func(string)
+}
+
+// confirmDialog asks before an action that is hard to undo.
+type confirmDialog struct {
+	title, body, action string
+	do                  func()
+}
+
+// dialogs shows the open dialog.
+func (v *View) dialogs(c *ui.Context) {
+	s := v.App.Current
+	if v.dialog == nil {
+		return
+	}
+	if s == nil || !s.Ready {
+		v.dialog = nil
+		return
+	}
+	open := true
+	ui.Modal(c, &open, func() {
+		v.dialog.show(v, c, s)
+	})
+	if !open {
+		v.dialog = nil
+	}
+}
+
+func dialogTitle(c *ui.Context, title string) {
+	ui.Text(c, title).FontSize(18).Bold().MaxLines(2)
+}
+
+// dialogButtons ends a dialog with Cancel and its action.
+func (v *View) dialogButtons(c *ui.Context, action string, disabled, submitted bool, do func()) {
+	ui.Row(c).Gap(8).Justify(ui.End).Margin(8, 0, 0, 0).Children(func() {
+		if ui.Button(c, "Cancel").Clicked() {
+			v.dialog = nil
+		}
+		if (ui.PrimaryButton(c, action).Disabled(disabled).Clicked() || submitted) && !disabled {
+			do()
+		}
+	})
+}
+
+func (v *View) textDialog(c *ui.Context, d *textDialog) {
+	ui.Column(c).Width(460).Padding(8).Gap(12).Children(func() {
+		dialogTitle(c, d.title)
+		submitted := false
+		if d.lines {
+			ui.TextArea(c.Key("text"), &d.value).Lines(3, 10).Label(d.label).AutoFocus()
+		} else {
+			submitted = ui.TextInput(c.Key("text"), &d.value).Label(d.label).Placeholder(d.label).AutoFocus().Submitted()
+		}
+		empty := !d.lines && strings.TrimSpace(d.value) == ""
+		v.dialogButtons(c, d.submit, empty, submitted, func() {
+			v.dialog = nil
+			d.save(strings.TrimSpace(d.value))
+		})
+	})
+}
+
+func (v *View) confirmDialog(c *ui.Context, d *confirmDialog) {
+	ui.Column(c).Width(440).Padding(8).Gap(12).Children(func() {
+		dialogTitle(c, d.title)
+		ui.Text(c, d.body).TextColor(c.Theme().TextMuted)
+		v.dialogButtons(c, d.action, false, false, func() {
+			v.dialog = nil
+			d.do()
 		})
 	})
 }

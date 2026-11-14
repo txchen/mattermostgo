@@ -6,12 +6,12 @@ import (
 	"fmt"
 	"slices"
 	"strings"
+	"time"
 
 	"github.com/egoist/mygo/ui"
 	mdview "github.com/egoist/mygo/ui/markdown"
 
 	"github.com/txchen/mattermostgo/internal/app"
-	"github.com/txchen/mattermostgo/internal/markdown"
 	"github.com/txchen/mattermostgo/internal/store"
 )
 
@@ -43,6 +43,10 @@ func (v *View) webImage(c *ui.Context, s *app.Server, img store.Image, w, h floa
 func (v *View) embed(c *ui.Context, s *app.Server, e *store.Embed, opens store.PostID) {
 	t := c.Theme()
 	p := colors(c)
+	if e.Quote != nil {
+		v.quote(c, s, e)
+		return
+	}
 	if e.ImageOnly {
 		img := ui.ButtonBase(c).AlignSelf(ui.Start).Label("Open image").Tooltip(e.URL)
 		img.Children(func() { v.webImage(c, s, *e.Image, 480, 360) })
@@ -109,7 +113,7 @@ func (v *View) attachment(c *ui.Context, s *app.Server, post store.PostID, a sto
 	p := colors(c)
 	md := v.markdownOptions(s)
 	if a.Pretext != "" {
-		v.opensThread(mdview.View(c, markdown.Prepare(a.Pretext), md), s, opens)
+		v.opensThread(mdview.View(c, v.prepare(s, a.Pretext), md), s, opens)
 	}
 	ui.Row(c).FillWidth().MaxWidth(640).Margin(4, 0, 0, 0).Radius(4).BorderWidth(1).BorderColor(t.Border).Clip().Children(func() {
 		ui.Box(c).Width(4).FillHeight().Background(attachmentColor(c, a.Color))
@@ -140,7 +144,7 @@ func (v *View) attachment(c *ui.Context, s *app.Server, post store.PostID, a sto
 						}
 					}
 					if a.Text != "" {
-						v.opensThread(mdview.View(c, markdown.Prepare(a.Text), md), s, opens)
+						v.opensThread(mdview.View(c, v.prepare(s, a.Text), md), s, opens)
 					} else if a.Title == "" && a.Fallback != "" && len(a.Fields) == 0 {
 						v.opensThread(ui.Text(c, a.Fallback).FontSize(14).Selectable(), s, opens)
 					}
@@ -184,7 +188,7 @@ func (v *View) attachmentFields(c *ui.Context, s *app.Server, fields []store.Att
 				ui.Text(c, f.Title).FontSize(13).FontWeight(700)
 			}
 			if f.Value != "" {
-				v.opensThread(mdview.View(c, markdown.Prepare(f.Value), md), s, opens)
+				v.opensThread(mdview.View(c, v.prepare(s, f.Value), md), s, opens)
 			}
 		})
 	}
@@ -296,4 +300,49 @@ func (v *View) actionMenu(c *ui.Context, s *app.Server, post store.PostID, act s
 			}
 		}
 	})
+}
+
+// quote shows the post a permalink links to, as the webapp's permalink
+// preview: who wrote it where and when, its text, and a way to it.
+func (v *View) quote(c *ui.Context, s *app.Server, e *store.Embed) {
+	t := c.Theme()
+	p := colors(c)
+	q := e.Quote
+	card := ui.ButtonBase(c).FillWidth().MaxWidth(640).Margin(4, 0, 0, 0).Padding(10, 12).Radius(4).BorderWidth(1).BorderColor(t.Border).Label(quoteLabel(q))
+	if card.Hovered() {
+		card.Background(t.SurfaceHover)
+	}
+	card.Children(func() {
+		ui.Column(c).FillWidth().Gap(6).Children(func() {
+			ui.Row(c).Gap(8).AlignItems(ui.Center).Children(func() {
+				v.avatar(c, s, q.UserID, 20)
+				ui.Text(c, v.App.UserName(s, q.UserID)).FontSize(13).FontWeight(700)
+				if e.QuoteChannel != "" {
+					ui.Text(c, "in ~"+e.QuoteChannel).FontSize(12).TextColor(t.TextMuted)
+				}
+				at := time.UnixMilli(q.CreateAt)
+				ui.Text(c, at.Format("Jan 2, ")+v.clock(at)).FontSize(12).TextColor(t.TextMuted)
+				ui.Spacer(c)
+				ui.Text(c, "Jump").FontSize(12).FontWeight(600).TextColor(p.link)
+			})
+			if q.Message != "" {
+				mdview.View(c, v.prepare(s, q.Message), v.markdownOptions(s)).AlignSelf(ui.Start)
+			}
+			if n := len(q.Files); n > 0 {
+				ui.Text(c, fmt.Sprint(n, " attachment", map[bool]string{true: "s"}[n > 1])).FontSize(12).TextColor(t.TextMuted)
+			}
+		})
+	})
+	if card.Clicked() {
+		v.App.OpenPost(s, q.ID)
+	}
+}
+
+// quoteLabel names a permalink preview by the start of the post it shows.
+func quoteLabel(q *store.Post) string {
+	text := []rune(strings.TrimSpace(q.Message))
+	if len(text) > 40 {
+		text = append(text[:40], '…')
+	}
+	return "Open the linked message: " + string(text)
 }

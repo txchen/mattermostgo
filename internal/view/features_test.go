@@ -1,6 +1,9 @@
 package view
 
 import (
+	"bytes"
+	"image"
+	"image/png"
 	"slices"
 	"strings"
 	"testing"
@@ -93,6 +96,47 @@ func TestJumpToPost(t *testing.T) {
 	h.tt.Advance(4 * time.Second)
 	if h.tt.FramePending() {
 		t.Error("the highlight keeps asking for frames")
+	}
+}
+
+// A custom emoji in a message draws as its picture, a permalink shows
+// the post it links to, and compact messages put the name on the line.
+func TestRound5Messages(t *testing.T) {
+	h := newHarness(t)
+	var pic bytes.Buffer
+	img := image.NewRGBA(image.Rect(0, 0, 32, 32))
+	for i := 0; i < len(img.Pix); i += 4 {
+		img.Pix[i], img.Pix[i+3] = 220, 255
+	}
+	png.Encode(&pic, img)
+	h.replies["GET /api/v4/emoji"] = `[{"id":"e1","name":"partyparrot"}]`
+	h.replies["GET /api/v4/emoji/e1/image"] = pic.String()
+	now := time.Now().UnixMilli()
+	h.srv.Store.Apply(store.PostCreated{Post: store.Post{ID: "ce", ChannelID: "town", UserID: "bob", CreateAt: now, Message: "ship it :partyparrot: now"}})
+	h.srv.Store.Apply(store.PostCreated{Post: store.Post{ID: "pl", ChannelID: "town", UserID: "bob", CreateAt: now + 1, Message: "see this",
+		Embed: &store.Embed{Quote: &store.Post{ID: "p1", ChannelID: "town", UserID: "bob", CreateAt: now - 3600000, Message: "the quoted **words**"}, QuoteChannel: "Town Square"}}})
+	h.settle(func() bool { return !strings.Contains(strings.Join(h.tt.Texts(), " "), ":partyparrot:") })
+	for _, want := range []string{"the quoted words", "in ~Town Square", "Jump"} {
+		if !strings.Contains(strings.Join(h.tt.Texts(), " "), want) {
+			t.Errorf("no %q in %q", want, h.tt.Texts())
+		}
+	}
+	h.snapshot("round5-messages")
+	h.replies["GET /api/v4/posts/p1/thread"] = `{"order":["p1"],"posts":{"p1":{"id":"p1","channel_id":"town","user_id":"bob","message":"hello"}}}`
+	if err := h.tt.Click("Open the linked message: the quoted **words**"); err != nil {
+		t.Fatal(err)
+	}
+	h.settle(func() bool { return h.srv.Jump.Post == "p1" })
+
+	h.srv.Store.Apply(store.PrefsChanged{Prefs: []store.Preference{{Category: "display_settings", Name: "message_display", Value: "compact"}}})
+	h.srv.Store.Apply(store.UsersLoaded{Users: []store.User{{ID: "maya", Username: "maya"}}})
+	h.srv.Store.Apply(store.PostCreated{Post: store.Post{ID: "mc", ChannelID: "town", UserID: "maya", CreateAt: now + 2, Message: "compact line"}})
+	h.tt.Frame()
+	h.snapshot("round5-compact")
+	name, _ := h.tt.Find("maya")
+	text, _ := h.tt.Find("compact line")
+	if name.Y+name.H < text.Y || name.Y > text.Y+text.H {
+		t.Errorf("compact name %v not on the line of %v", name, text)
 	}
 }
 

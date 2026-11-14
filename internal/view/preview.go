@@ -25,7 +25,7 @@ type previewDialog struct {
 	text map[store.FileID]string
 }
 
-func (*previewDialog) isDialog() {}
+func (d *previewDialog) show(v *View, c *ui.Context, s *app.Server) { v.previewDialog(c, s, d) }
 
 // textExts are the files shown as text, by extension.
 var textExts = map[string]string{

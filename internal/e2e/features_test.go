@@ -1,8 +1,13 @@
 package e2e
 
 import (
+	"bytes"
 	"context"
 	"fmt"
+	"image"
+	"image/png"
+	"mime/multipart"
+	"net/http"
 	"slices"
 	"testing"
 	"time"
@@ -134,9 +139,30 @@ func TestPostWhileOpening(t *testing.T) {
 	base := serverURL(t)
 	ctx := context.Background()
 	bobC, _ := login(t, base, "bob")
+	_, alice := login(t, base, "alice")
+	// Two channels of its own, so that its posts push no others out of
+	// the first page of a seeded channel.
+	var team store.TeamID
+	for _, tm := range must(bobC.Load(ctx)).Teams {
+		if tm.Name == "eng" {
+			team = tm.ID
+		}
+	}
+	tag := fmt.Sprint(time.Now().UnixNano() % 1000000)
+	var mine []string
+	for _, n := range []string{"a", "b"} {
+		ch := must(bobC.CreateChannel(ctx, mm.NewChannel{TeamID: team, Name: "opening-" + n + tag, DisplayName: "Opening " + n + tag, Type: store.Open}))
+		if err := bobC.AddMembers(ctx, ch.ID, []store.UserID{alice.ID}); err != nil {
+			t.Fatal(err)
+		}
+		mine = append(mine, ch.Name)
+		id := ch.ID
+		t.Cleanup(func() { bobC.ArchiveChannel(context.Background(), id) })
+	}
 	c := newClient(t)
 	s := c.loginAs(base, "alice")
-	for i, name := range []string{"random", "town-square", "random", "town-square", "random"} {
+	c.until("own channels", func() bool { return channelByName(s, mine[0]) != "" && channelByName(s, mine[1]) != "" })
+	for i, name := range []string{mine[0], mine[1], mine[0], mine[1], mine[0]} {
 		ch := channelByName(s, name)
 		other := channelByName(s, "dev")
 		c.a.OpenChannel(s, other)
@@ -150,6 +176,50 @@ func TestPostWhileOpening(t *testing.T) {
 			return tl != nil && !tl.Loading && slices.Contains(tl.Order, p.ID)
 		})
 	}
+}
+
+// A custom emoji made on the server draws in a message, and a permalink
+// to a post shows the post it links to.
+func TestRound5UI(t *testing.T) {
+	base := serverURL(t)
+	ctx := context.Background()
+	admin, adminUser := login(t, base, "admin")
+	bobC, _ := login(t, base, "bob")
+	name := fmt.Sprintf("parrot%d", time.Now().UnixNano()%1000000)
+	var pic bytes.Buffer
+	img := image.NewRGBA(image.Rect(0, 0, 32, 32))
+	for i := 0; i < len(img.Pix); i += 4 {
+		img.Pix[i], img.Pix[i+3] = 220, 255
+	}
+	png.Encode(&pic, img)
+	var body bytes.Buffer
+	w := multipart.NewWriter(&body)
+	part, _ := w.CreateFormFile("image", name+".png")
+	part.Write(pic.Bytes())
+	w.WriteField("emoji", fmt.Sprintf(`{"creator_id":%q,"name":%q}`, adminUser.ID, name))
+	w.Close()
+	req, _ := http.NewRequest("POST", base+"/api/v4/emoji", &body)
+	req.Header.Set("Content-Type", w.FormDataContentType())
+	req.Header.Set("Authorization", "Bearer "+admin.Token())
+	res, err := http.DefaultClient.Do(req)
+	if err != nil || res.StatusCode >= 300 {
+		t.Fatalf("making the emoji: %v %v", res, err)
+	}
+	res.Body.Close()
+
+	c := newClient(t)
+	s := c.loginAs(base, "alice")
+	dev := channelByName(s, "dev")
+	c.a.OpenChannel(s, dev)
+	c.until("dev loaded", func() bool { tl := s.Store.Timelines[dev]; return tl != nil && !tl.Loading && len(tl.Order) > 0 })
+	quoted := must(bobC.CreatePost(ctx, mm.NewPost{ChannelID: dev, Message: "the quoted " + name}))
+	must(bobC.CreatePost(ctx, mm.NewPost{ChannelID: dev, Message: "party :" + name + ": time"}))
+	must(bobC.CreatePost(ctx, mm.NewPost{ChannelID: dev, Message: "see " + base + "/eng/pl/" + string(quoted.ID)}))
+	label := "Open the linked message: the quoted " + name
+	c.until("permalink preview", c.has(label))
+	c.until("emoji drawn", func() bool { return c.has("party")() && !c.has(":"+name+":")() })
+	c.click(label)
+	c.until("jumped", func() bool { return s.Jump.Post == quoted.ID })
 }
 
 // choosePost chooses from the context menu of the post showing text.

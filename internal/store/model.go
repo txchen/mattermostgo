@@ -202,6 +202,10 @@ type Embed struct {
 	SiteName, Title, Description string
 	Image                        *Image
 	ImageOnly                    bool
+	// Quote is the post a permalink links to, with the name of its
+	// channel, which shows in place of a page's card.
+	Quote        *Post
+	QuoteChannel string
 }
 
 // Attachment is a message attachment, as webhooks and bots send them.

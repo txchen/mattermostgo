@@ -181,11 +181,15 @@ type wireEmbed struct {
 	Type string `json:"type"`
 	URL  string `json:"url"`
 	Data *struct {
-		URL         string `json:"url"`
-		Title       string `json:"title"`
-		Description string `json:"description"`
-		SiteName    string `json:"site_name"`
-		Images      []struct {
+		// A permalink to a post of the server holds the post.
+		Post               *wirePost `json:"post"`
+		ChannelDisplayName string    `json:"channel_display_name"`
+		TeamName           string    `json:"team_name"`
+		URL                string    `json:"url"`
+		Title              string    `json:"title"`
+		Description        string    `json:"description"`
+		SiteName           string    `json:"site_name"`
+		Images             []struct {
 			URL       string `json:"url"`
 			SecureURL string `json:"secure_url"`
 			Width     int    `json:"width"`
@@ -257,6 +261,12 @@ func (p wirePost) embed() *store.Embed {
 	}
 	for _, e := range p.Metadata.Embeds {
 		switch e.Type {
+		case "permalink":
+			if e.Data == nil || e.Data.Post == nil {
+				continue
+			}
+			q := e.Data.Post.post()
+			return &store.Embed{Quote: &q, QuoteChannel: e.Data.ChannelDisplayName}
 		case "image":
 			w, h := size(e.URL)
 			return &store.Embed{URL: e.URL, Image: &store.Image{URL: e.URL, Width: w, Height: h}, ImageOnly: true}

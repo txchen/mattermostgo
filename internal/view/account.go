@@ -171,8 +171,10 @@ type profileDialog struct {
 	busy  bool
 }
 
-func (*customStatusDialog) isDialog() {}
-func (*profileDialog) isDialog()      {}
+func (d *customStatusDialog) show(v *View, c *ui.Context, s *app.Server) {
+	v.customStatusDialog(c, s, d)
+}
+func (d *profileDialog) show(v *View, c *ui.Context, s *app.Server) { v.profileDialog(c, s, d) }
 
 func (v *View) openProfile(me *store.User) {
 	v.dialog = &profileDialog{patch: mm.UserPatch{FirstName: me.FirstName, LastName: me.LastName, Nickname: me.Nickname, Position: me.Position}}

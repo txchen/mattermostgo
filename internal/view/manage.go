@@ -15,22 +15,6 @@ import (
 	"github.com/txchen/mattermostgo/internal/store"
 )
 
-// dialog is the one dialog the window shows over the main view, if any.
-type dialog interface{ isDialog() }
-
-// textDialog asks for one line of text, or several with lines.
-type textDialog struct {
-	title, label, value, submit string
-	lines                       bool
-	save                        func(string)
-}
-
-// confirmDialog asks before an action that is hard to undo.
-type confirmDialog struct {
-	title, body, action string
-	do                  func()
-}
-
 type renameDialog struct {
 	channel          store.ChannelID
 	display, urlName string
@@ -68,14 +52,16 @@ type membersDialog struct {
 	loaded  bool
 }
 
-func (*textDialog) isDialog()          {}
-func (*confirmDialog) isDialog()       {}
-func (*renameDialog) isDialog()        {}
-func (*createChannelDialog) isDialog() {}
-func (*browseDialog) isDialog()        {}
-func (*addMembersDialog) isDialog()    {}
-func (*membersDialog) isDialog()       {}
-func (*integrations) isDialog()        {}
+func (d *textDialog) show(v *View, c *ui.Context, s *app.Server)    { v.textDialog(c, d) }
+func (d *confirmDialog) show(v *View, c *ui.Context, s *app.Server) { v.confirmDialog(c, d) }
+func (d *renameDialog) show(v *View, c *ui.Context, s *app.Server)  { v.renameDialog(c, s, d) }
+func (d *createChannelDialog) show(v *View, c *ui.Context, s *app.Server) {
+	v.createChannelDialog(c, s, d)
+}
+func (d *browseDialog) show(v *View, c *ui.Context, s *app.Server)     { v.browseDialog(c, s, d) }
+func (d *addMembersDialog) show(v *View, c *ui.Context, s *app.Server) { v.addMembersDialog(c, s, d) }
+func (d *membersDialog) show(v *View, c *ui.Context, s *app.Server)    { v.membersDialog(c, s, d) }
+func (d *integrations) show(v *View, c *ui.Context, s *app.Server)     { v.integrationsDialog(c, s, d) }
 
 // urlName makes a channel's URL name from its display name, as the
 // webapp suggests one.
@@ -296,106 +282,6 @@ func (v *View) openAddMembers(s *app.Server, id store.ChannelID) {
 		for _, m := range ms {
 			d.members[m.User] = true
 		}
-	})
-}
-
-// dialogs shows the open dialog.
-func (v *View) dialogs(c *ui.Context) {
-	s := v.App.Current
-	if v.dialog == nil {
-		return
-	}
-	if s == nil || !s.Ready {
-		v.dialog = nil
-		return
-	}
-	open := true
-	ui.Modal(c, &open, func() {
-		switch d := v.dialog.(type) {
-		case *textDialog:
-			v.textDialog(c, d)
-		case *confirmDialog:
-			v.confirmDialog(c, d)
-		case *renameDialog:
-			v.renameDialog(c, s, d)
-		case *createChannelDialog:
-			v.createChannelDialog(c, s, d)
-		case *browseDialog:
-			v.browseDialog(c, s, d)
-		case *addMembersDialog:
-			v.addMembersDialog(c, s, d)
-		case *membersDialog:
-			v.membersDialog(c, s, d)
-		case *integrations:
-			v.integrationsDialog(c, s, d)
-		case *interactiveDialog:
-			v.interactiveDialog(c, s, d)
-		case *settingsDialog:
-			v.settingsDialog(c, s, d)
-		case *channelNotifyDialog:
-			v.channelNotifyDialog(c, s, d)
-		case *forwardDialog:
-			v.forwardDialog(c, s, d)
-		case *historyDialog:
-			v.historyDialog(c, s, d)
-		case *peopleDialog:
-			v.peopleDialog(c, s, d)
-		case *inviteDialog:
-			v.inviteDialog(c, s, d)
-		case *previewDialog:
-			v.previewDialog(c, s, d)
-		case *customStatusDialog:
-			v.customStatusDialog(c, s, d)
-		case *profileDialog:
-			v.profileDialog(c, s, d)
-		}
-	})
-	if !open {
-		v.dialog = nil
-	}
-}
-
-func dialogTitle(c *ui.Context, title string) {
-	ui.Text(c, title).FontSize(18).Bold().MaxLines(2)
-}
-
-// dialogButtons ends a dialog with Cancel and its action.
-func (v *View) dialogButtons(c *ui.Context, action string, disabled, submitted bool, do func()) {
-	ui.Row(c).Gap(8).Justify(ui.End).Margin(8, 0, 0, 0).Children(func() {
-		if ui.Button(c, "Cancel").Clicked() {
-			v.dialog = nil
-		}
-		if (ui.PrimaryButton(c, action).Disabled(disabled).Clicked() || submitted) && !disabled {
-			do()
-		}
-	})
-}
-
-func (v *View) textDialog(c *ui.Context, d *textDialog) {
-	ui.Column(c).Width(460).Padding(8).Gap(12).Children(func() {
-		dialogTitle(c, d.title)
-		submitted := false
-		if d.lines {
-			ui.TextArea(c.Key("text"), &d.value).Lines(3, 10).Label(d.label).AutoFocus()
-		} else {
-			submitted = ui.TextInput(c.Key("text"), &d.value).Label(d.label).Placeholder(d.label).AutoFocus().Submitted()
-		}
-		empty := !d.lines && strings.TrimSpace(d.value) == ""
-		v.dialogButtons(c, d.submit, empty, submitted, func() {
-			v.dialog = nil
-			d.save(strings.TrimSpace(d.value))
-		})
-	})
-}
-
-func (v *View) confirmDialog(c *ui.Context, d *confirmDialog) {
-	ui.Column(c).Width(440).Padding(8).Gap(12).Children(func() {
-		dialogTitle(c, d.title)
-		ui.Text(c, d.body).TextColor(c.Theme().TextMuted)
-		v.dialogButtons(c, d.action, false, false, func() {
-			v.dialog = nil
-			d.do()
-		})
 	})
 }
 

@@ -37,7 +37,7 @@ type settingsDialog struct {
 	err                        string
 }
 
-func (*settingsDialog) isDialog() {}
+func (d *settingsDialog) show(v *View, c *ui.Context, s *app.Server) { v.settingsDialog(c, s, d) }
 
 var settingsTabs = []string{"Notifications", "Display", "Sidebar", "Security"}
 
@@ -451,7 +451,9 @@ type channelNotifyDialog struct {
 	props   map[string]string
 }
 
-func (*channelNotifyDialog) isDialog() {}
+func (d *channelNotifyDialog) show(v *View, c *ui.Context, s *app.Server) {
+	v.channelNotifyDialog(c, s, d)
+}
 
 func (v *View) openChannelNotify(s *app.Server, id store.ChannelID) {
 	d := &channelNotifyDialog{channel: id}

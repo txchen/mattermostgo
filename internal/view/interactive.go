@@ -19,7 +19,7 @@ type interactiveDialog struct {
 	busy   bool
 }
 
-func (*interactiveDialog) isDialog() {}
+func (d *interactiveDialog) show(v *View, c *ui.Context, s *app.Server) { v.interactiveDialog(c, s, d) }
 
 func newInteractive(d store.Dialog) *interactiveDialog {
 	id := &interactiveDialog{d: d, text: map[string]*string{}, on: map[string]*bool{}, errors: map[string]string{}}

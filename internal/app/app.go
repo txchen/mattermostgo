@@ -417,6 +417,9 @@ func (a *App) apply(s *Server, ev store.Event) {
 		for _, p := range ev.Posts {
 			ids = append(ids, p.UserID)
 			ids = append(ids, p.Participants...)
+			if p.Embed != nil && p.Embed.Quote != nil {
+				ids = append(ids, p.Embed.Quote.UserID)
+			}
 		}
 		a.askUsers(s, ids)
 	case store.ThreadLoaded:

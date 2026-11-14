@@ -463,6 +463,16 @@ func (v *View) updateSuggestions(s *app.Server, sug *suggestions, text string, c
 			e, _ := markdown.Emoji(name)
 			sug.items = append(sug.items, suggestion{label: e + "  :" + name + ":", insert: ":" + name + ": "})
 		}
+		var custom []string
+		for name := range v.App.CustomEmojis(s) {
+			if strings.HasPrefix(name, prefix) {
+				custom = append(custom, name)
+			}
+		}
+		slices.Sort(custom)
+		for _, name := range custom {
+			sug.items = append(sug.items, suggestion{label: ":" + name + ":", detail: "custom", insert: ":" + name + ": "})
+		}
 	}
 	sug.items = sug.items[:min(8, len(sug.items))]
 	sug.sel = min(sug.sel, max(len(sug.items)-1, 0))
