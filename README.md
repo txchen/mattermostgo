@@ -54,8 +54,8 @@ universal app for Apple Silicon and Intel Macs. It installs next to the
 official app and does not touch its settings.
 
 The app updates itself: it checks for a new version once a day, shows
-what is new, and installs it when you agree ("Check for Updates…" in the
-account menu). `brew upgrade` upgrades it only when the app has not
+what is new, and installs it when you agree ("Check for Updates…" is in
+the Mattermost Go menu and the account menu). `brew upgrade` upgrades it only when the app has not
 updated itself yet, as it reads the version of the app you have.
 
 ### Linux and Windows (preview)
