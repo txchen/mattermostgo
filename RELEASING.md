@@ -37,7 +37,7 @@ the login keychain, and the notary credentials stored there as
    git tag vVERSION && git push origin main vVERSION
    gh release create vVERSION build/darwin-universal/mattermost-go-VERSION.dmg \
      build/darwin-universal/mattermost-go-VERSION.dmg.sha256 build/linux-*/*.deb build/linux-*/*.rpm \
-     build/darwin-universal/*.tar.gz build/darwin-universal/update-*.json \
+     build/darwin-universal/*.tar.gz build/darwin-universal/update-*.json build/*/*.delta \
      build/linux-*/*.tar.gz build/linux-*/update-*.json build/linux-amd64/install.sh \
      build/windows-*/*setup*.exe build/windows-*/*.tar.gz build/windows-*/update-*.json \
      build/windows-amd64/install.ps1 build/SHA256SUMS \
@@ -45,7 +45,8 @@ the login keychain, and the notary credentials stored there as
    ```
 
    Installed apps read `update-<platform>.json` of the latest release and
-   update to it. `install.sh` is the same file for every platform.
+   update to it, through the `.delta` from the version they run when the
+   build made one. `install.sh` is the same file for every platform.
 
 5. Update `Casks/mattermost-go.rb` in `txchen/homebrew-tap` with the
    version and the dmg's SHA-256, so that new installs get it, push it,
