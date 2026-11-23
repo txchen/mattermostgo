@@ -99,6 +99,7 @@ func (v *View) channelMenu(m *ui.Menu, c *ui.Context, s *app.Server, id store.Ch
 		if m.Item("Copy Link").Chosen() {
 			c.WriteClipboard(a.ChannelLink(s, id))
 		}
+		v.copyChannelID(m, c, id)
 		return
 	}
 	if m.Item("Open in New Window").Chosen() {
@@ -193,6 +194,7 @@ func (v *View) channelMenu(m *ui.Menu, c *ui.Context, s *app.Server, id store.Ch
 			c.Toast("Link copied")
 		}
 	}
+	v.copyChannelID(m, c, id)
 	if !header && !dm && m.Item("Add Members").Chosen() {
 		v.openAddMembers(s, id)
 	}
@@ -218,6 +220,14 @@ func (v *View) channelMenu(m *ui.Menu, c *ui.Context, s *app.Server, id store.Ch
 		} else {
 			a.LeaveChannel(s, id)
 		}
+	}
+}
+
+// copyChannelID is the menu item that copies the ID of a channel.
+func (v *View) copyChannelID(m *ui.Menu, c *ui.Context, id store.ChannelID) {
+	if m.Item("Copy Channel ID").Chosen() {
+		c.WriteClipboard(string(id))
+		c.Toast("Channel ID copied")
 	}
 }
 

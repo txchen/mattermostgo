@@ -354,6 +354,14 @@ func (v *View) infoPanel(c *ui.Context, s *app.Server, p *infoPanel) {
 				if !p.noBookmarks && p.loaded[0] {
 					v.bookmarks(c, s, p)
 				}
+				ui.Row(c).Gap(6).AlignItems(ui.Center).Children(func() {
+					ui.Text(c, "ID:").FontSize(12).TextColor(t.TextMuted)
+					ui.Text(c, string(ch.ID)).FontSize(12).Font("monospace").TextColor(t.TextMuted).Selectable().Grow(1)
+					if ui.Link(c, "Copy", "").FontSize(12).Label("Copy Channel ID").Clicked() {
+						c.WriteClipboard(string(ch.ID))
+						c.Toast("Channel ID copied")
+					}
+				})
 			case 1:
 				if !p.loaded[1] {
 					ui.Spinner(c)

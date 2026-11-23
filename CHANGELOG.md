@@ -1,5 +1,9 @@
 # Changelog
 
+## 0.5.5
+
+- You can copy a channel's ID: "Copy Channel ID" is in the channel's menu, in the sidebar and in the channel header, and the About tab of the channel's Info shows the ID with a Copy link.
+
 ## 0.5.4
 
 - You no longer turn Away while you use the computer. The app now tells the server every minute that you are active, as the official app does, and that you stopped once you leave the keyboard and mouse for five minutes; the server then sets Away. A status you chose yourself stays as it is.

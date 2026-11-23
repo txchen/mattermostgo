@@ -230,3 +230,27 @@ func TestDMMenu(t *testing.T) {
 	}
 	h.tt.CloseMenu()
 }
+
+// The sidebar's menu and the header's copy the channel ID, and the Info
+// panel shows it.
+func TestCopyChannelID(t *testing.T) {
+	h := newHarness(t)
+	h.choose("Developers", "Copy Channel ID")
+	if got := h.tt.Clipboard(); got != "dev" {
+		t.Errorf("sidebar copied %q", got)
+	}
+	h.choose("Town Square channel menu", "Copy Channel ID")
+	if got := h.tt.Clipboard(); got != "town" {
+		t.Errorf("header copied %q", got)
+	}
+	h.choose("Town Square channel menu", "View Info")
+	h.settle(func() bool { return h.tt.HasText("town") })
+	h.tt.SetClipboard("")
+	if err := h.tt.Click("Copy Channel ID"); err != nil {
+		t.Fatal(err)
+	}
+	h.tt.Frame()
+	if got := h.tt.Clipboard(); got != "town" {
+		t.Errorf("info copied %q", got)
+	}
+}
