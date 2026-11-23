@@ -327,18 +327,18 @@ func TestParityUIWebhookAndPreviews(t *testing.T) {
 	c.tt.Type(title)
 	c.click("Save")
 	c.until("hook URL", c.has(base+"/hooks/"))
-	var hookURL string
-	for _, text := range c.tt.Texts() {
-		if strings.HasPrefix(text, base+"/hooks/") {
-			hookURL = text
-		}
-	}
 	c.click("Done")
+	// Other tests leave hooks of their own, so the URL comes from the hook
+	// with this title, not from the last URL on the screen.
+	var hookURL string
 	adminAPI, _ := login(t, base, "admin")
 	for _, h := range must(adminAPI.IncomingHooks(context.Background(), s.Team)) {
 		if h.DisplayName == title {
-			town = store.ChannelID(h.ChannelID)
+			town, hookURL = store.ChannelID(h.ChannelID), base+"/hooks/"+h.ID
 		}
+	}
+	if hookURL == "" {
+		t.Fatalf("no hook %q on the server", title)
 	}
 	c.a.OpenChannel(s, town)
 
