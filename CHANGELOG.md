@@ -1,5 +1,9 @@
 # Changelog
 
+## 0.5.6
+
+- Opening an unread channel that was visited before no longer misses new messages after a reconnect: cached timelines of other channels are cleared on reconnect, and opening an unread channel fetches its latest messages.
+
 ## 0.5.5
 
 - You can copy a channel's ID: "Copy Channel ID" is in the channel's menu, in the sidebar and in the channel header, and the About tab of the channel's Info shows the ID with a Copy link.
