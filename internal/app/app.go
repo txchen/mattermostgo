@@ -369,10 +369,20 @@ func (a *App) connect(s *Server) {
 			}
 			if first {
 				a.restorePlace(s)
-			} else if reconnected && s.Channel != "" {
-				a.fetchPosts(s, s.Channel, "")
-				if s.Thread != "" {
-					a.OpenThread(s, s.Thread)
+			} else if reconnected {
+				// Cached timelines of other channels may have missed
+				// WebSocket events while offline; drop them so they
+				// fetch fresh posts when opened.
+				for id := range s.Store.Timelines {
+					if id != s.Channel {
+						s.Store.Apply(store.TimelineDropped{Channel: id})
+					}
+				}
+				if s.Channel != "" {
+					a.fetchPosts(s, s.Channel, "")
+					if s.Thread != "" {
+						a.OpenThread(s, s.Thread)
+					}
 				}
 			}
 		})
@@ -640,7 +650,7 @@ func (a *App) openChannel(s *Server, id store.ChannelID) {
 		}
 	}
 	s.Channel = id
-	if t := s.Store.Timelines[id]; t == nil || (len(t.Order) == 0 && !t.Loading) {
+	if t := s.Store.Timelines[id]; t == nil || !t.Loading && (len(t.Order) == 0 || s.Store.Unread(id) || s.Store.Mentions(id) > 0) {
 		a.fetchPosts(s, id, "")
 	}
 	a.markViewed(s, id)
